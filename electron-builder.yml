@@ -48,3 +48,4 @@ publish:
   provider: github
   owner: eflores1989
   repo: clipclicks
+  releaseType: release
