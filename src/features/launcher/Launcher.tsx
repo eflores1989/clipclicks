@@ -36,6 +36,11 @@ export function Launcher() {
   const [browserOpen, setBrowserOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<ProjectRef[] | null>(null);
   const [filter, setFilter] = useState('');
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    window.videoZoom.appVersion().then(setVersion).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +169,8 @@ export function Launcher() {
           )}
         </section>
       </main>
+
+      {version && <footer className="launcher__footer">Clipclicks Studio v{version}</footer>}
 
       {browserOpen && (
         <div className="proj-browser__backdrop" onClick={() => setBrowserOpen(false)}>

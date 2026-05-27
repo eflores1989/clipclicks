@@ -2185,6 +2185,17 @@ body.cursor-grabbing * {
 }
 .export-dialog__done-actions { display: flex; gap: 8px; }
 
+/* Subtle build version at the bottom of the launcher / Start recording screen */
+.launcher__footer {
+  text-align: center;
+  padding: 10px 0 16px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--text-dim, #6b7280);
+  opacity: 0.55;
+  user-select: none;
+}
+
 /* ===== Auto-update banner ===== */
 .update-banner {
   position: fixed;
