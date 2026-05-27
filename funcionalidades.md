@@ -480,7 +480,7 @@ El render reproduce el timeline completo en tiempo real (tarda ≈ el largo del 
 - **Sin firmar** (no hay certificado): al instalar, Windows SmartScreen avisa "editor desconocido" → "Más info → Ejecutar de todos modos". Normal para QA.
 
 ### Auto-update (electron-updater + GitHub Releases)
-- `publish` en `electron-builder.yml` apunta a `github.com/eflores1989/clipclicks`. `npm run release` (con `GH_TOKEN`) sube instalador + `latest.yml` + `.blockmap` a un Release.
+- `publish` en `electron-builder.yml` apunta a `github.com/eflores1989/clipclicks` con `releaseType: release` (se publica directo, sin paso manual de "Publish"). `npm run release` (con `GH_TOKEN` = token clásico con scope `repo`) sube instalador + `latest.yml` + `.blockmap` a un Release publicado.
 - `electron/main/updater.ts`: SOLO en builds empaquetados, chequea al arrancar (a los 4s) y cada 30 min, descarga en background y avisa al renderer. `UpdateBanner.tsx` muestra "Actualización lista — Reiniciar" → `quitAndInstall`. **No hay botón de "buscar actualizaciones"**: es automático (relanzá la app para forzar un chequeo).
 - Flujo QA: publicás v0.1.0 → instalan → publicás v0.1.1 → la app instalada detecta y se actualiza.
 
