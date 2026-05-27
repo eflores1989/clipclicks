@@ -1,0 +1,50 @@
+appId: com.tecnosoftware.clipclicksstudio
+productName: Clipclicks Studio
+copyright: Copyright © 2026 Tecnosoftware
+
+# Skip @electron/rebuild — uiohook-napi is N-API (ABI-stable) and ships a
+# prebuilt that already works, so we don't need a Visual Studio C++ toolchain
+# to repackage it.
+npmRebuild: false
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - "!**/node_modules/**/{README.md,CHANGELOG.md,LICENSE,*.d.ts.map}"
+
+asarUnpack:
+  - "**/node_modules/uiohook-napi/**/*"
+  - "**/node_modules/ffmpeg-static/**/*"
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # No spaces — GitHub rewrites spaces in asset names, which would break the
+  # latest.yml URL match (auto-update 404). Keep it hyphenated + consistent.
+  artifactName: Clipclicks-Studio-Setup-${version}.${ext}
+  executableName: ClipclicksStudio
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Clipclicks Studio
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+# Auto-update via GitHub Releases. `npm run release` (with GH_TOKEN set) builds
+# the installer + latest.yml and uploads them to a Release; the installed app
+# reads this repo's Releases to find updates. `npm run dist` only builds locally.
+publish:
+  provider: github
+  owner: eflores1989
+  repo: clipclicks

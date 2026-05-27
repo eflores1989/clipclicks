@@ -1,0 +1,52 @@
+{
+  "name": "video-zoom",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clipclicks Studio — screen recording with automatic click-zoom for Windows",
+  "author": "eflores@tecnosoftware.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eflores1989/clipclicks.git"
+  },
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "node scripts/run.mjs electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "node scripts/run.mjs electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "icons": "node scripts/make-icons.mjs",
+    "dist": "node scripts/prep-build.mjs && node scripts/make-icons.mjs && electron-vite build && electron-builder --win",
+    "release": "node scripts/prep-build.mjs && node scripts/make-icons.mjs && electron-vite build && electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "bezier-easing": "^2.1.0",
+    "electron-updater": "^6.8.3",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "immer": "^10.1.1",
+    "lucide-react": "^0.456.0",
+    "mp4-muxer": "^5.2.2",
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.6.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-rnd": "^10.4.13",
+    "uiohook-napi": "^1.5.4",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "cross-env": "^10.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
