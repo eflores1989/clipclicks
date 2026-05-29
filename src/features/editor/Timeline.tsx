@@ -209,7 +209,7 @@ export function Timeline() {
             className="timeline__ruler"
             ref={rulerRef}
             onPointerDown={onPointerDown}
-            title="Arrastrá para mover el playhead · Ctrl+rueda para zoom"
+            title="Drag to move the playhead · Ctrl+wheel to zoom"
           />
           <div
             className="timeline__track-area"
@@ -233,7 +233,7 @@ export function Timeline() {
               <ZoomTrack trackWidth={trackWidth} durationMs={viewDurationMs} />
             </div>
             <div className="timeline__row timeline__row--text">
-              <span className="timeline__row-label">Texto</span>
+              <span className="timeline__row-label">Text</span>
               <TextTrack durationMs={viewDurationMs} />
             </div>
             <div className="timeline__playhead" ref={playheadRef}>
@@ -245,7 +245,7 @@ export function Timeline() {
         </div>
       </div>
       {zoom > 1 && (
-        <div className="timeline__zoom-badge" title="Ctrl+rueda para zoom">
+        <div className="timeline__zoom-badge" title="Ctrl+wheel to zoom">
           {Math.round(zoom * 100)}% · <button onClick={() => setZoom(1)}>reset</button>
         </div>
       )}

@@ -8,6 +8,7 @@ import {
   PROJECT_SCHEMA_VERSION,
   type AudioMedia,
   type Clip,
+  type CustomBackground,
   type ImageMedia,
   type Project,
   type ProjectAppendClipPayload,
@@ -990,10 +991,11 @@ export function registerProjectRoot(absPath: string): void {
 
 export function isPathInsideAllowedRoots(absPath: string): boolean {
   const resolved = resolvePath(absPath).toLowerCase();
-  // Built-in roots — projects + staging under the app's userData.
+  // Built-in roots — projects + staging + custom-backgrounds under the app's userData.
   const builtIns = [
     resolvePath(projectsRoot()).toLowerCase(),
     resolvePath(join(app.getPath('userData'), 'staging')).toLowerCase(),
+    resolvePath(customBackgroundsRoot()).toLowerCase(),
   ];
   if (builtIns.some((root) => resolved.startsWith(root))) return true;
   // Plus anything inside a project we've explicitly opened.
@@ -1001,4 +1003,96 @@ export function isPathInsideAllowedRoots(absPath: string): boolean {
     if (resolved.startsWith(root)) return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Custom backgrounds: user-imported images + short videos persisted app-wide.
+// Index: %APPDATA%/VideoZoom/custom-backgrounds.json
+// Files: %APPDATA%/VideoZoom/backgrounds/<id>.<ext>
+// ---------------------------------------------------------------------------
+
+const CUSTOM_BG_IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+const CUSTOM_BG_VIDEO_EXTS = ['mp4', 'webm', 'mov', 'mkv'];
+
+export function customBackgroundsRoot(): string {
+  return join(app.getPath('userData'), 'backgrounds');
+}
+
+function customBackgroundsIndexPath(): string {
+  return join(app.getPath('userData'), 'custom-backgrounds.json');
+}
+
+async function loadCustomBackgroundsIndex(): Promise<CustomBackground[]> {
+  try {
+    const text = await readFile(customBackgroundsIndexPath(), 'utf-8');
+    const parsed = JSON.parse(text) as { items?: CustomBackground[] };
+    return Array.isArray(parsed.items) ? parsed.items : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveCustomBackgroundsIndex(items: CustomBackground[]): Promise<void> {
+  await mkdir(app.getPath('userData'), { recursive: true });
+  await writeFile(customBackgroundsIndexPath(), JSON.stringify({ items }, null, 2));
+}
+
+export async function listCustomBackgrounds(): Promise<CustomBackground[]> {
+  const items = await loadCustomBackgroundsIndex();
+  // Drop entries whose file disappeared (manual user cleanup).
+  const valid: CustomBackground[] = [];
+  for (const it of items) {
+    if (existsSync(it.filePath)) valid.push(it);
+  }
+  if (valid.length !== items.length) await saveCustomBackgroundsIndex(valid);
+  return valid.sort((a, b) => b.addedAt - a.addedAt);
+}
+
+export async function importCustomBackground(): Promise<CustomBackground | null> {
+  const res = await dialog.showOpenDialog({
+    title: 'Import background',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Backgrounds (image or video)', extensions: [...CUSTOM_BG_IMAGE_EXTS, ...CUSTOM_BG_VIDEO_EXTS] },
+      { name: 'Images', extensions: CUSTOM_BG_IMAGE_EXTS },
+      { name: 'Videos', extensions: CUSTOM_BG_VIDEO_EXTS },
+    ],
+  });
+  if (res.canceled || res.filePaths.length === 0) return null;
+
+  const src = res.filePaths[0];
+  const extLower = (extname(src).replace('.', '').toLowerCase()) || 'png';
+  const isVideo = CUSTOM_BG_VIDEO_EXTS.includes(extLower);
+  const isImage = CUSTOM_BG_IMAGE_EXTS.includes(extLower);
+  if (!isVideo && !isImage) throw new Error(`Unsupported background file type: .${extLower}`);
+
+  const id = randomUUID();
+  const root = customBackgroundsRoot();
+  await mkdir(root, { recursive: true });
+  const destName = `${id}.${extLower}`;
+  const destPath = join(root, destName);
+  await copyFile(src, destPath);
+
+  const entry: CustomBackground = {
+    id,
+    name: basename(src),
+    filePath: destPath,
+    kind: isVideo ? 'video' : 'image',
+    addedAt: Date.now(),
+  };
+
+  const items = await loadCustomBackgroundsIndex();
+  items.push(entry);
+  await saveCustomBackgroundsIndex(items);
+  return entry;
+}
+
+export async function deleteCustomBackground(id: string): Promise<void> {
+  const items = await loadCustomBackgroundsIndex();
+  const idx = items.findIndex((x) => x.id === id);
+  if (idx === -1) return;
+  const victim = items[idx];
+  try { await rm(victim.filePath, { force: true }); } catch { /* ignore */ }
+  items.splice(idx, 1);
+  await saveCustomBackgroundsIndex(items);
 }

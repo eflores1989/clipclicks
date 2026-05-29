@@ -271,12 +271,33 @@ export interface BackgroundShadow {
 }
 
 export interface BackgroundConfig {
+  /**
+   * Either a built-in preset id from `BACKGROUND_PRESETS`, or the id of an
+   * imported custom background. Custom ids are prefixed with `custom:` (the
+   * suffix matches `CustomBackground.id` stored in the app config).
+   */
   presetId: string;
   paddingPct: number;
   cornerRadiusPx: number;
   shadow: BackgroundShadow;
   customColor?: string;
   customGradient?: { from: string; to: string; angleDeg: number };
+}
+
+/**
+ * A user-imported background (image or short video) persisted app-wide under
+ * `%APPDATA%/VideoZoom/backgrounds/`. The renderer references them by `id`
+ * (set on `BackgroundConfig.presetId` as `custom:<id>`).
+ */
+export interface CustomBackground {
+  id: string;
+  name: string;
+  /** Absolute path on disk inside the app's `backgrounds/` directory. */
+  filePath: string;
+  /** 'image' = static (png/jpg/webp); 'video' = animated (mp4/webm). */
+  kind: 'image' | 'video';
+  /** ms since epoch — used to sort the library newest-first. */
+  addedAt: number;
 }
 
 /**
@@ -289,8 +310,8 @@ export interface BackgroundConfig {
  *               click. Pairs well with recordings made WITHOUT the system
  *               cursor (otherwise you'd see the dot following the OS arrow).
  *   - 'arrow':  Windows-style pointer shape that follows the mouse position
- *               and scales up on click. The "Screen Studio" look. Designed
- *               to be used with `Clip.systemCursorCaptured = false`.
+ *               and scales up on click. Designed to be used with
+ *               `Clip.systemCursorCaptured = false`.
  */
 export type CursorStyle = 'hidden' | 'pulse' | 'dot' | 'arrow';
 

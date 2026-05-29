@@ -294,7 +294,7 @@ export function Transport() {
         <button
           className="t-btn t-btn--split"
           onClick={splitAtPlayhead}
-          title="Split en el playhead (S) — sin selección corta todo; con un clip/audio seleccionado, solo ese"
+          title="Split at the playhead (S) — with nothing selected, cuts everything; with a clip or audio selected, cuts only that one"
           aria-label="Split"
         >
           <Scissors size={14} />

@@ -130,13 +130,13 @@ export function Launcher() {
           <button className="card card--disabled" disabled>
             <FileVideo size={32} />
             <span className="card__title">Import video</span>
-            <span className="card__hint">Coming after MVP</span>
+            <span className="card__hint">Coming soon</span>
           </button>
 
           <button className="card" onClick={openBrowser} disabled={opening}>
             <FolderOpen size={32} />
             <span className="card__title">Open project</span>
-            <span className="card__hint">Elegí de tus proyectos</span>
+            <span className="card__hint">Pick one of your projects</span>
           </button>
         </div>
 
@@ -176,8 +176,8 @@ export function Launcher() {
         <div className="proj-browser__backdrop" onClick={() => setBrowserOpen(false)}>
           <div className="proj-browser" onClick={(e) => e.stopPropagation()}>
             <header className="proj-browser__header">
-              <h3>Abrir proyecto</h3>
-              <button className="icon-btn" onClick={() => setBrowserOpen(false)} aria-label="Cerrar">
+              <h3>Open project</h3>
+              <button className="icon-btn" onClick={() => setBrowserOpen(false)} aria-label="Close">
                 <X size={18} />
               </button>
             </header>
@@ -185,7 +185,7 @@ export function Launcher() {
               <Search size={14} />
               <input
                 type="text"
-                placeholder="Buscar por nombre…"
+                placeholder="Search by name…"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 autoFocus
@@ -194,10 +194,10 @@ export function Launcher() {
             </div>
             <div className="proj-browser__body">
               {allProjects === null && (
-                <div className="recents__empty"><Loader2 size={16} className="spin" /> Cargando…</div>
+                <div className="recents__empty"><Loader2 size={16} className="spin" /> Loading…</div>
               )}
               {allProjects !== null && filteredProjects.length === 0 && (
-                <div className="recents__empty">{filter ? 'Sin resultados.' : 'No hay proyectos todavía.'}</div>
+                <div className="recents__empty">{filter ? 'No matches.' : 'No projects yet.'}</div>
               )}
               {filteredProjects.length > 0 && (
                 <ul className="recents__list">
@@ -221,7 +221,7 @@ export function Launcher() {
             </div>
             <footer className="proj-browser__footer">
               <button className="btn btn--ghost" onClick={() => { setBrowserOpen(false); handleOpenDialog(); }}>
-                <FolderOpen size={14} /> Buscar otra carpeta…
+                <FolderOpen size={14} /> Browse another folder…
               </button>
             </footer>
           </div>

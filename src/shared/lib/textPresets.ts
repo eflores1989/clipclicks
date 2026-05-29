@@ -3,7 +3,7 @@ import type { Ms, TextEvent, TextPreset } from '../types/project';
 /** Default look + animation for each pool block. fontScale = fraction of canvas height. */
 export const TEXT_PRESET_DEFAULTS: Record<TextPreset, Omit<TextEvent, 'id' | 'startMs' | 'endMs' | 'preset'>> = {
   title: {
-    text: 'Título',
+    text: 'Title',
     nx: 0.5, ny: 0.22,
     fontScale: 0.10,
     fontFamily: 'Inter, Segoe UI, sans-serif',
@@ -15,7 +15,7 @@ export const TEXT_PRESET_DEFAULTS: Record<TextPreset, Omit<TextEvent, 'id' | 'st
     enterDurationMs: 450, exitDurationMs: 400,
   },
   subtitle: {
-    text: 'Subtítulo',
+    text: 'Subtitle',
     nx: 0.5, ny: 0.85,
     fontScale: 0.05,
     fontFamily: 'Inter, Segoe UI, sans-serif',
@@ -28,7 +28,7 @@ export const TEXT_PRESET_DEFAULTS: Record<TextPreset, Omit<TextEvent, 'id' | 'st
   },
   paragraph: {
     // Typewriter feel — good for software walkthroughs.
-    text: 'Escribí tu texto…',
+    text: 'Type your text…',
     nx: 0.5, ny: 0.5,
     fontScale: 0.045,
     fontFamily: 'Inter, Segoe UI, sans-serif',

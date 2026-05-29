@@ -45,18 +45,18 @@ export function AudioProperties() {
       <section className="properties__section">
         <div className="zoom-prop__header">
           <h3 className="panel__title"><Music size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Audio</h3>
-          <button className="icon-btn icon-btn--danger" onClick={remove} title="Quitar del timeline" aria-label="Delete audio clip">
+          <button className="icon-btn icon-btn--danger" onClick={remove} title="Remove from timeline" aria-label="Delete audio clip">
             <Trash2 size={14} />
           </button>
         </div>
         <p className="panel__hint" style={{ wordBreak: 'break-word' }}>{media.name}</p>
         <div className="audio-prop__rows">
           <div className="audio-prop__row">
-            <span className="audio-prop__row-label">Posición</span>
+            <span className="audio-prop__row-label">Position</span>
             <span className="audio-prop__row-value">{fmt(track.offsetMs)}</span>
           </div>
           <div className="audio-prop__row">
-            <span className="audio-prop__row-label">Duración</span>
+            <span className="audio-prop__row-label">Duration</span>
             <span className="audio-prop__row-value">{fmt(lenMs)}</span>
           </div>
         </div>
@@ -69,7 +69,7 @@ export function AudioProperties() {
             checked={track.muted}
             onChange={(e) => patch((t) => { t.muted = e.target.checked; }, 'Mute audio')}
           />
-          {track.muted ? <VolumeX size={14} /> : <Volume2 size={14} />} Silenciar
+          {track.muted ? <VolumeX size={14} /> : <Volume2 size={14} />} Mute
         </label>
 
         <GainSlider track={track} patch={patch} />
@@ -85,7 +85,7 @@ function GainSlider({ track, patch }: { track: AudioTrack; patch: (fn: (t: Audio
   const snap = useRef<number | null>(null);
   return (
     <div className="panel__field">
-      <label className="panel__label">Volumen <span className="panel__num">{Math.round(track.volume * 100)}%</span></label>
+      <label className="panel__label">Volume <span className="panel__num">{Math.round(track.volume * 100)}%</span></label>
       <input
         type="range" min={0} max={100} step={1}
         value={Math.round(Math.min(1, track.volume) * 100)}

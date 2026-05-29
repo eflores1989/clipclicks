@@ -10,6 +10,7 @@ import type {
 } from '../../src/shared/types/recording';
 import type {
   AudioMedia,
+  CustomBackground,
   ExportMuxPayload,
   ExportProgressMsg,
   ExportRunPayload,
@@ -113,6 +114,12 @@ const api = {
       ipcRenderer.on(IPC.EXPORT_PROGRESS, wrapped);
       return () => ipcRenderer.removeListener(IPC.EXPORT_PROGRESS, wrapped);
     },
+  },
+
+  customBackgrounds: {
+    list: (): Promise<CustomBackground[]> => ipcRenderer.invoke(IPC.CUSTOM_BG_LIST),
+    import: (): Promise<CustomBackground | null> => ipcRenderer.invoke(IPC.CUSTOM_BG_IMPORT),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC.CUSTOM_BG_DELETE, id),
   },
 
   update: {

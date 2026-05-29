@@ -14,7 +14,7 @@ import type { MouseEventRaw } from '@shared/types/recording';
 import { computeZoomState, IDENTITY_ZOOM, type ZoomState } from '@shared/lib/computeZoomState';
 import { cursorAt, newCursorCursor, type CursorCursor } from '@shared/lib/cursorAt';
 import { textRenderState } from '@shared/lib/textPresets';
-import { getPreset, paintBackgroundToCanvas } from './backgrounds';
+import { extractCustomId, getCustomBackground, getPreset, isCustomPresetId, onCustomBackgroundsChange, paintBackgroundToCanvas } from './backgrounds';
 
 /** Base radius (canvas px) for the cursor dot before applying size multiplier. */
 const CURSOR_BASE_RADIUS_PX = 9;
@@ -402,6 +402,29 @@ export class PixiScene {
     this.applyLayout(bg);
   }
 
+  private bgVideoEl: HTMLVideoElement | null = null;
+
+  private clearBgMedia(): void {
+    if (this.bgVideoEl) {
+      try { this.bgVideoEl.pause(); this.bgVideoEl.removeAttribute('src'); this.bgVideoEl.load(); } catch { /* ignore */ }
+      this.bgVideoEl = null;
+    }
+  }
+
+  private setBgSpriteFromTexture(texture: Texture, presetId: string): void {
+    if (this.bgSprite) {
+      this.rootContainer.removeChild(this.bgSprite);
+      this.bgSprite.destroy();
+      this.bgSprite = null;
+    }
+    const sprite = new Sprite(texture);
+    sprite.width = this.size.w;
+    sprite.height = this.size.h;
+    this.bgSprite = sprite;
+    this.rootContainer.addChildAt(sprite, 0);
+    this.currentPresetId = presetId;
+  }
+
   /**
    * Resize the renderer to a new output size (used by the persistent export
    * scene, which is reused across exports at different resolutions). Forces a
@@ -415,21 +438,68 @@ export class PixiScene {
     if (this.lastBg) this.applyBackground(this.lastBg);
   }
 
+  private pendingCustomBgUnsub: (() => void) | null = null;
+
   private repaintBackgroundSprite(presetId: string): void {
+    this.clearBgMedia();
+    // Clear any pending wait for a previous custom bg.
+    if (this.pendingCustomBgUnsub) { this.pendingCustomBgUnsub(); this.pendingCustomBgUnsub = null; }
+    if (isCustomPresetId(presetId)) {
+      const customId = extractCustomId(presetId);
+      const entry = customId ? getCustomBackground(customId) : undefined;
+      if (!entry) {
+        // Fall back to default while we wait for the registry to populate.
+        const fallback = paintBackgroundToCanvas(getPreset('sunset-gradient'), this.size.w, this.size.h);
+        this.setBgSpriteFromTexture(Texture.from(fallback), presetId);
+        // Listen for the entry to arrive (e.g. registry hydration on project load).
+        this.pendingCustomBgUnsub = onCustomBackgroundsChange(() => {
+          if (this.currentPresetId !== presetId) return;
+          const cid = extractCustomId(presetId);
+          if (cid && getCustomBackground(cid)) {
+            if (this.pendingCustomBgUnsub) { this.pendingCustomBgUnsub(); this.pendingCustomBgUnsub = null; }
+            this.currentPresetId = null;
+            this.repaintBackgroundSprite(presetId);
+          }
+        });
+        return;
+      }
+      if (entry.kind === 'image') {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = entry.assetUrl;
+        const finish = (): void => {
+          if (this.currentPresetId !== presetId && this.currentPresetId !== null) {
+            // user switched presets mid-load; abandon
+            return;
+          }
+          this.setBgSpriteFromTexture(Texture.from(img), presetId);
+        };
+        if (img.complete && img.naturalWidth > 0) finish();
+        else img.addEventListener('load', finish, { once: true });
+      } else {
+        const v = document.createElement('video');
+        v.crossOrigin = 'anonymous';
+        v.muted = true;
+        v.loop = true;
+        v.playsInline = true;
+        v.autoplay = true;
+        v.src = entry.assetUrl;
+        this.bgVideoEl = v;
+        const finish = (): void => {
+          if (this.bgVideoEl !== v) return;
+          this.setBgSpriteFromTexture(Texture.from(v), presetId);
+          v.play().catch(() => { /* the user can scrub past autoplay errors */ });
+        };
+        if (v.readyState >= 2) finish();
+        else v.addEventListener('loadeddata', finish, { once: true });
+      }
+      // Tentatively mark the target preset so concurrent calls don't repaint.
+      this.currentPresetId = presetId;
+      return;
+    }
     const preset = getPreset(presetId);
     const canvas = paintBackgroundToCanvas(preset, this.size.w, this.size.h);
-    const texture = Texture.from(canvas);
-    if (this.bgSprite) {
-      this.rootContainer.removeChild(this.bgSprite);
-      this.bgSprite.destroy();
-      this.bgSprite = null;
-    }
-    const sprite = new Sprite(texture);
-    sprite.width = this.size.w;
-    sprite.height = this.size.h;
-    this.bgSprite = sprite;
-    this.rootContainer.addChildAt(sprite, 0);
-    this.currentPresetId = presetId;
+    this.setBgSpriteFromTexture(Texture.from(canvas), presetId);
   }
 
   private applyLayout(bg: BackgroundConfig): void {
@@ -721,6 +791,8 @@ export class PixiScene {
       this.dropShadow = null;
       this.pixelate = null;
       this.pixOn = false;
+      this.clearBgMedia();
+      if (this.pendingCustomBgUnsub) { this.pendingCustomBgUnsub(); this.pendingCustomBgUnsub = null; }
     } catch { /* ignore */ }
     this.app.destroy(true, { children: true, texture: false, textureSource: false });
   }

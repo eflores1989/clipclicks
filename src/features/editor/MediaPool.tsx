@@ -252,7 +252,7 @@ function AudioPoolView() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     } catch (err) {
-      window.alert(`No se pudo acceder al micrófono: ${(err as Error).message}`);
+      window.alert(`Could not access the microphone: ${(err as Error).message}`);
       return;
     }
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
@@ -285,7 +285,7 @@ function AudioPoolView() {
       update((d) => { d.audioPool.push(media); }, { label: 'Record mic audio' });
     } catch (err) {
       console.error('[AudioPool] save mic failed:', err);
-      window.alert(`No se pudo guardar la grabación: ${(err as Error).message}`);
+      window.alert(`Could not save the recording: ${(err as Error).message}`);
     }
   }, [projectPath, update]);
 
@@ -339,22 +339,22 @@ function AudioPoolView() {
           disabled={importing || recording || !projectPath}
         >
           {importing ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
-          {importing ? 'Importando…' : 'Importar'}
+          {importing ? 'Importing…' : 'Import'}
         </button>
         {recording ? (
           <button className="btn btn--small btn--record media-pool__import" onClick={stopMic}>
-            <Square size={13} /> Detener ({elapsed}s)
+            <Square size={13} /> Stop ({elapsed}s)
           </button>
         ) : (
           <button className="btn btn--small media-pool__import" onClick={startMic} disabled={importing || !projectPath}>
-            <Mic size={14} /> Grabar mic
+            <Mic size={14} /> Record mic
           </button>
         )}
       </div>
 
       {audioPool.length === 0 ? (
         <p className="panel__hint" style={{ marginTop: 12 }}>
-          Importá música o voces (mp3, wav, m4a…). Después tocá + para ponerlas en la pista de audio del timeline.
+          Import music or voice (mp3, wav, m4a…). Then click + to add it to the timeline's audio track.
         </p>
       ) : (
         <ul className="media-pool__list" style={{ marginTop: 12 }}>
@@ -369,7 +369,7 @@ function AudioPoolView() {
                 <button
                   className="icon-btn"
                   onClick={() => addToTimeline(m.id)}
-                  title="Agregar a la pista de audio (en el playhead)"
+                  title="Add to the audio track (at the playhead)"
                   aria-label="Add audio to timeline"
                 >
                   <Plus size={14} />
@@ -377,7 +377,7 @@ function AudioPoolView() {
                 <button
                   className="icon-btn icon-btn--danger"
                   onClick={() => deleteForever(m.id)}
-                  title="Borrar definitivamente (elimina el archivo)"
+                  title="Delete permanently (removes the file)"
                   aria-label="Delete audio forever"
                 >
                   <Trash2 size={14} />
@@ -397,9 +397,9 @@ function AudioPoolView() {
  * that preset's look + animation. Defaults live in `textPresets.ts`.
  */
 const TEXT_BLOCKS: { preset: TextPreset; label: string; hint: string }[] = [
-  { preset: 'title', label: 'Título', hint: 'Grande, centrado, fade-in' },
-  { preset: 'subtitle', label: 'Subtítulo', hint: 'Abajo, fade-in' },
-  { preset: 'paragraph', label: 'Párrafo', hint: 'Se va escribiendo (typewriter)' },
+  { preset: 'title', label: 'Title', hint: 'Large, centered, fade-in' },
+  { preset: 'subtitle', label: 'Subtitle', hint: 'Bottom, fade-in' },
+  { preset: 'paragraph', label: 'Paragraph', hint: 'Typewriter animation' },
 ];
 
 const DEFAULT_TEXT_DURATION_MS = 3000;
@@ -418,7 +418,7 @@ function TextPoolView() {
   return (
     <div className="media-pool">
       <p className="panel__hint" style={{ marginBottom: 10 }}>
-        Tocá un bloque para agregarlo en el playhead. Después editá el contenido, la fuente y la animación en el panel, y arrastralo sobre el video para acomodarlo.
+        Click a block to drop it at the playhead. Then edit the content, font and animation in the panel, and drag it over the video to position it.
       </p>
       <ul className="media-pool__list">
         {TEXT_BLOCKS.map((b) => (
@@ -429,7 +429,7 @@ function TextPoolView() {
               <span className="media-pool__card-meta">{b.hint}</span>
             </div>
             <div className="media-pool__card-actions">
-              <button className="icon-btn" onClick={(e) => { e.stopPropagation(); addText(b.preset); }} title="Agregar al timeline" aria-label="Add text">
+              <button className="icon-btn" onClick={(e) => { e.stopPropagation(); addText(b.preset); }} title="Add to timeline" aria-label="Add text">
                 <Plus size={14} />
               </button>
             </div>
@@ -502,7 +502,7 @@ function ImagePoolView() {
         update((d) => { d.imagePool.push(media); }, { label: 'Import image' });
       }
     } catch (err) {
-      window.alert(`No se pudo importar la imagen: ${(err as Error).message}`);
+      window.alert(`Could not import the image: ${(err as Error).message}`);
     } finally {
       setImporting(false);
     }
@@ -514,12 +514,12 @@ function ImagePoolView() {
       const media = await window.videoZoom.project.saveImageAsset(projectPath, bytes, kind, name, canvasW, canvasH);
       update((d) => { d.imagePool.push(media); }, { label: 'Add image' });
     } catch (err) {
-      window.alert(`No se pudo crear la imagen: ${(err as Error).message}`);
+      window.alert(`Could not create the image: ${(err as Error).message}`);
     }
   }, [projectPath, update, canvasW, canvasH]);
 
   const addSolid = useCallback(async () => {
-    addGenerated(await paintSolidPng(solidColor, canvasW, canvasH), 'solid', `Sólido ${solidColor}`);
+    addGenerated(await paintSolidPng(solidColor, canvasW, canvasH), 'solid', `Solid ${solidColor}`);
   }, [addGenerated, solidColor, canvasW, canvasH]);
 
   const addGradient = useCallback(async (g: typeof GRADIENT_PRESETS[number]) => {
@@ -540,7 +540,7 @@ function ImagePoolView() {
     const proj = useProjectStore.getState().project;
     const media = proj?.imagePool.find((m) => m.id === mediaId);
     if (!media || !projectPath) return;
-    if (!window.confirm(`Borrar "${media.name}" del pool?`)) return;
+    if (!window.confirm(`Remove "${media.name}" from the pool?`)) return;
     // Only delete the file if no clip references it (a placed image shares the file).
     const referenced = proj?.clips.some((c) => c.filePath === media.filePath);
     if (!referenced) {
@@ -554,14 +554,14 @@ function ImagePoolView() {
       <div className="media-pool__audio-actions">
         <button className="btn btn--small btn--accent media-pool__import" onClick={handleImport} disabled={importing || !projectPath}>
           {importing ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
-          {importing ? 'Importando…' : 'Importar'}
+          {importing ? 'Importing…' : 'Import'}
         </button>
       </div>
 
       <div className="image-gen">
         <div className="image-gen__row">
-          <input type="color" className="panel__color" value={solidColor} onChange={(e) => setSolidColor(e.target.value)} title="Color del fondo sólido" />
-          <button className="btn btn--small" onClick={addSolid} disabled={!projectPath}>Agregar sólido</button>
+          <input type="color" className="panel__color" value={solidColor} onChange={(e) => setSolidColor(e.target.value)} title="Solid color" />
+          <button className="btn btn--small" onClick={addSolid} disabled={!projectPath}>Add solid</button>
         </div>
         <div className="image-gen__grad">
           {GRADIENT_PRESETS.map((g) => (
@@ -569,7 +569,7 @@ function ImagePoolView() {
               key={g.name}
               className="image-gen__swatch"
               style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})` }}
-              title={`Agregar degradado ${g.name}`}
+              title={`Add ${g.name} gradient`}
               onClick={() => addGradient(g)}
               disabled={!projectPath}
             />
@@ -579,7 +579,7 @@ function ImagePoolView() {
 
       {imagePool.length === 0 ? (
         <p className="panel__hint" style={{ marginTop: 12 }}>
-          Importá imágenes o creá fondos sólidos/degradados. Después tocá + para sumarlas al canal de video (duran 3s; estiralas desde los bordes).
+          Import images or generate solid/gradient backgrounds. Click + to add them to the video track (3s by default; resize them by their edges).
         </p>
       ) : (
         <ul className="media-pool__list" style={{ marginTop: 12 }}>
@@ -593,10 +593,10 @@ function ImagePoolView() {
                 <span className="media-pool__card-meta">{m.width || '?'}×{m.height || '?'}</span>
               </div>
               <div className="media-pool__card-actions">
-                <button className="icon-btn" onClick={() => addToTimeline(m.id)} title="Agregar al canal de video" aria-label="Add image to timeline">
+                <button className="icon-btn" onClick={() => addToTimeline(m.id)} title="Add to video track" aria-label="Add image to timeline">
                   <Plus size={14} />
                 </button>
-                <button className="icon-btn icon-btn--danger" onClick={() => deleteForever(m.id)} title="Borrar del pool" aria-label="Delete image">
+                <button className="icon-btn icon-btn--danger" onClick={() => deleteForever(m.id)} title="Remove from pool" aria-label="Delete image">
                   <Trash2 size={14} />
                 </button>
               </div>

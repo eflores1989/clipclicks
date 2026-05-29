@@ -45,6 +45,10 @@ export const IPC = {
   UPDATE_PROGRESS: 'update:progress',
   UPDATE_DOWNLOADED: 'update:downloaded',
   UPDATE_INSTALL: 'update:install',
+
+  CUSTOM_BG_LIST: 'custom-bg:list',
+  CUSTOM_BG_IMPORT: 'custom-bg:import',
+  CUSTOM_BG_DELETE: 'custom-bg:delete',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

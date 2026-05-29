@@ -128,7 +128,7 @@ export function AudioSegments({ viewDurationMs }: { viewDurationMs: number }) {
   }, [pxToMs, selectAudio]);
 
   if (audioTracks.length === 0) {
-    return <span className="timeline__row-hint">Sin audio — importá desde el panel Media › Audio</span>;
+    return <span className="timeline__row-hint">No audio — import one from the Media › Audio panel</span>;
   }
   if (viewDurationMs <= 0) return null;
 
@@ -146,7 +146,7 @@ export function AudioSegments({ viewDurationMs }: { viewDurationMs: number }) {
             className={`audio-segment ${selected ? 'audio-segment--selected' : ''} ${t.muted ? 'audio-segment--muted' : ''}`}
             style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
             onPointerDown={(e) => onPointerDown(e, t.id, 'move')}
-            title={`${media?.name ?? 'Audio'} — arrastrá para mover, los bordes para recortar`}
+            title={`${media?.name ?? 'Audio'} — drag to move, drag the edges to trim`}
           >
             <Waveform peaks={media?.peaks} inMs={t.inMs} outMs={t.outMs} mediaDurationMs={media?.durationMs ?? 0} />
             <span className="audio-segment__label">

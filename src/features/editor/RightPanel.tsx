@@ -50,8 +50,8 @@ export function RightPanel() {
             <div className="media-pool__subtabs" role="tablist">
               <SubtabButton id="video" current={mediaSubtab} onClick={setMediaSubtab} label="Video" />
               <SubtabButton id="audio" current={mediaSubtab} onClick={setMediaSubtab} label="Audio" />
-              <SubtabButton id="text" current={mediaSubtab} onClick={setMediaSubtab} label="Texto" />
-              <SubtabButton id="images" current={mediaSubtab} onClick={setMediaSubtab} label="Imágenes" />
+              <SubtabButton id="text" current={mediaSubtab} onClick={setMediaSubtab} label="Text" />
+              <SubtabButton id="images" current={mediaSubtab} onClick={setMediaSubtab} label="Images" />
             </div>
             <MediaPool subtab={mediaSubtab} />
           </>

@@ -8,6 +8,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
+import { ensureCustomBackgroundsLoaded } from './features/editor/useCustomBackgrounds';
+
+// Kick off the custom-backgrounds registry hydration as soon as the renderer
+// loads, so that any project referencing a `custom:<id>` background can resolve
+// it on the first paint instead of after the user opens the BG library.
+ensureCustomBackgroundsLoaded();
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Root container not found');

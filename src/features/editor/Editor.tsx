@@ -308,7 +308,7 @@ export function Editor() {
           <button
             className="btn btn--small btn--export"
             onClick={() => { useExportStore.getState().reset(); useExportStore.getState().setOpen(true); }}
-            title="Exportar el proyecto a MP4"
+            title="Export the project to MP4"
           >
             <Download size={14} /> Export
           </button>

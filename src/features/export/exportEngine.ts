@@ -287,9 +287,9 @@ export async function renderTimelineToWebm(opts: ExportRenderOptions): Promise<U
     await new Promise((r) => setTimeout(r, 200)); // flush the last frame
     try { recorder.stop(); } catch { /* ignore */ }
     const bytes = await recorded;
-    if (recorderError) throw new Error(`No se pudo codificar el video (${recorderError}). Probá una resolución/calidad menor.`);
+    if (recorderError) throw new Error(`Could not encode the video (${recorderError}). Try a lower resolution or quality.`);
     if (bytes.length < 1024) {
-      throw new Error('La captura no produjo video. Suele pasar cuando la resolución es muy alta para codificar en vivo en esta PC — probá una resolución o calidad menor.');
+      throw new Error('Capture produced no video. This usually means the resolution is too high to encode live on this machine — try a lower resolution or quality.');
     }
     cleanup();
     return bytes;

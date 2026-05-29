@@ -12,7 +12,7 @@ const FONT_OPTIONS: { label: string; value: string }[] = [
   // Técnicas / cyberpunk (vienen con Windows 11, renderizan sin bundlear).
   { label: 'Consolas (mono)', value: 'Consolas, "Courier New", monospace' },
   { label: 'Cascadia Code', value: '"Cascadia Code", "Cascadia Mono", Consolas, monospace' },
-  { label: 'Bahnschrift (técnica)', value: 'Bahnschrift, "DIN", sans-serif' },
+  { label: 'Bahnschrift (technical)', value: 'Bahnschrift, "DIN", sans-serif' },
   { label: 'Impact (display)', value: 'Impact, "Arial Black", sans-serif' },
 ];
 
@@ -47,14 +47,14 @@ export function TextProperties() {
     <aside className="properties">
       <section className="properties__section">
         <div className="zoom-prop__header">
-          <h3 className="panel__title"><Type size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Texto</h3>
-          <button className="icon-btn icon-btn--danger" onClick={remove} title="Borrar texto" aria-label="Delete text">
+          <h3 className="panel__title"><Type size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Text</h3>
+          <button className="icon-btn icon-btn--danger" onClick={remove} title="Delete text" aria-label="Delete text">
             <Trash2 size={14} />
           </button>
         </div>
 
         <div className="panel__field">
-          <label className="panel__label">Contenido</label>
+          <label className="panel__label">Content</label>
           <textarea
             className="text-prop__textarea"
             value={t.text}
@@ -75,23 +75,23 @@ export function TextProperties() {
 
       <section className="properties__section">
         <div className="panel__field">
-          <label className="panel__label">Fuente</label>
+          <label className="panel__label">Font</label>
           <select className="panel__select" value={t.fontFamily} onChange={(e) => patch((ev) => { ev.fontFamily = e.target.value; }, 'Font')}>
             {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
         </div>
 
         <div className="text-prop__btnrow">
-          <button className={`text-prop__btn ${t.bold ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.bold = !ev.bold; }, 'Bold')} title="Negrita"><Bold size={14} /></button>
-          <button className={`text-prop__btn ${t.italic ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.italic = !ev.italic; }, 'Italic')} title="Cursiva"><Italic size={14} /></button>
+          <button className={`text-prop__btn ${t.bold ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.bold = !ev.bold; }, 'Bold')} title="Bold"><Bold size={14} /></button>
+          <button className={`text-prop__btn ${t.italic ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.italic = !ev.italic; }, 'Italic')} title="Italic"><Italic size={14} /></button>
           <span className="text-prop__divider" />
-          <button className={`text-prop__btn ${t.align === 'left' ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.align = 'left'; }, 'Align')} title="Izquierda"><AlignLeft size={14} /></button>
-          <button className={`text-prop__btn ${t.align === 'center' ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.align = 'center'; }, 'Align')} title="Centro"><AlignCenter size={14} /></button>
-          <button className={`text-prop__btn ${t.align === 'right' ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.align = 'right'; }, 'Align')} title="Derecha"><AlignRight size={14} /></button>
+          <button className={`text-prop__btn ${t.align === 'left' ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.align = 'left'; }, 'Align')} title="Left"><AlignLeft size={14} /></button>
+          <button className={`text-prop__btn ${t.align === 'center' ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.align = 'center'; }, 'Align')} title="Center"><AlignCenter size={14} /></button>
+          <button className={`text-prop__btn ${t.align === 'right' ? 'text-prop__btn--on' : ''}`} onClick={() => patch((ev) => { ev.align = 'right'; }, 'Align')} title="Right"><AlignRight size={14} /></button>
         </div>
 
         <div className="panel__field">
-          <label className="panel__label">Tamaño <span className="panel__num">{Math.round(t.fontScale * 100)}%</span></label>
+          <label className="panel__label">Size <span className="panel__num">{Math.round(t.fontScale * 100)}%</span></label>
           <input
             type="range" min={2} max={25} step={1}
             value={Math.round(t.fontScale * 100)}
@@ -114,27 +114,27 @@ export function TextProperties() {
 
         <label className="panel__checkbox">
           <input type="checkbox" checked={t.shadow} onChange={(e) => patch((ev) => { ev.shadow = e.target.checked; }, 'Shadow')} />
-          Sombra (legibilidad)
+          Drop shadow (readability)
         </label>
       </section>
 
       <section className="properties__section">
         <div className="panel__field">
-          <label className="panel__label">Entrada</label>
+          <label className="panel__label">Entrance</label>
           <select className="panel__select" value={t.enterAnim} onChange={(e) => patch((ev) => { ev.enterAnim = e.target.value as TextEvent['enterAnim']; }, 'Enter anim')}>
-            <option value="none">Sin animación</option>
-            <option value="fade">Aparición (fade)</option>
-            <option value="type">Se escribe (typewriter)</option>
+            <option value="none">No animation</option>
+            <option value="fade">Fade in</option>
+            <option value="type">Typewriter</option>
           </select>
         </div>
         <div className="panel__field">
-          <label className="panel__label">Salida</label>
+          <label className="panel__label">Exit</label>
           <select className="panel__select" value={t.exitAnim} onChange={(e) => patch((ev) => { ev.exitAnim = e.target.value as TextEvent['exitAnim']; }, 'Exit anim')}>
-            <option value="none">Sin animación</option>
-            <option value="fade">Desvanecer (fade)</option>
+            <option value="none">No animation</option>
+            <option value="fade">Fade out</option>
           </select>
         </div>
-        <p className="panel__hint">Arrastrá el texto sobre el video para moverlo; las esquinas cambian el tamaño.</p>
+        <p className="panel__hint">Drag the text over the video to position it; the corners resize.</p>
       </section>
     </aside>
   );

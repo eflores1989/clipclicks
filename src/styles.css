@@ -1191,6 +1191,65 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .bg-tile:hover { transform: scale(1.04); border-color: var(--border); }
 .bg-tile--active { border-color: var(--accent); }
 
+.bg-tile--custom {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  background: #1c1c2e;
+}
+.bg-tile__media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.bg-tile__kind {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 3px;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: none;
+}
+.bg-tile-wrap {
+  position: relative;
+}
+.bg-tile-wrap:hover .bg-tile__delete { opacity: 1; }
+.bg-tile__delete {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  border: 2px solid var(--panel-bg, #14141a);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.bg-library__sep {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.bg-library__import {
+  width: 100%;
+  justify-content: center;
+  margin-top: 10px;
+}
+
 .panel__phase {
   display: flex;
   gap: 8px;

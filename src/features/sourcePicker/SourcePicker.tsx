@@ -121,7 +121,7 @@ export function SourcePicker() {
       <div className="picker__options">
         <div className="picker__opt-group">
           <span className="picker__opt-group-title"><Monitor size={12} /> Cursor</span>
-          <label className={`picker__option ${tab === 'window' ? 'picker__option--disabled' : ''}`} title={tab === 'window' ? 'Solo disponible para captura de pantalla completa' : undefined}>
+          <label className={`picker__option ${tab === 'window' ? 'picker__option--disabled' : ''}`} title={tab === 'window' ? 'Only available when capturing the full screen' : undefined}>
             <input
               type="checkbox"
               checked={tab === 'window' ? true : captureSystemCursor}
@@ -129,13 +129,13 @@ export function SourcePicker() {
               onChange={(e) => setCaptureSystemCursor(e.target.checked)}
             />
             <span>
-              Capturar cursor del sistema
+              Capture the system cursor
               <span className="picker__option-hint">
                 {tab === 'window'
-                  ? 'En ventanas el cursor siempre queda en el video. Para excluirlo, grabá pantalla completa.'
+                  ? 'In window mode the system cursor is always recorded. To exclude it, record the full screen.'
                   : (captureSystemCursor
-                      ? 'La flecha de Windows queda en el video. En el editor usá estilo "Pulse" u "Oculto".'
-                      : 'Graba sin la flecha de Windows. En el editor usá estilo "Flecha" o "Dot".')}
+                      ? 'The Windows pointer will appear in the recording. In the editor, choose the "Pulse" or "Hidden" cursor style.'
+                      : 'Record without the Windows pointer. In the editor, choose the "Arrow" or "Dot" cursor style.')}
               </span>
             </span>
           </label>
@@ -145,23 +145,23 @@ export function SourcePicker() {
           <span className="picker__opt-group-title"><Mic size={12} /> Audio</span>
           {tab === 'window' ? (
             <p className="picker__option-hint" style={{ margin: 0 }}>
-              El audio solo está disponible grabando <strong>pantalla completa</strong> (capturar una ventana + audio deja el video en negro en Windows).
+              Audio capture is only available when recording the <strong>full screen</strong>.
             </p>
           ) : (
             <>
               <label className="picker__option">
                 <input type="checkbox" checked={captureMic} onChange={(e) => setCaptureMic(e.target.checked)} />
-                <span>Micrófono<span className="picker__option-hint">Tu voz, mezclada en el audio del clip.</span></span>
+                <span>Microphone<span className="picker__option-hint">Your voice, mixed into the clip's audio.</span></span>
               </label>
               <label className={`picker__option ${!captureSystemCursor ? 'picker__option--disabled' : ''}`}
-                title={!captureSystemCursor ? 'No disponible en modo sin cursor' : undefined}>
+                title={!captureSystemCursor ? 'Not available without the system cursor' : undefined}>
                 <input
                   type="checkbox"
                   checked={captureSystemAudio}
                   disabled={!captureSystemCursor}
                   onChange={(e) => setCaptureSystemAudio(e.target.checked)}
                 />
-                <span>Audio del sistema<span className="picker__option-hint">El sonido de tu PC (loopback). Si tu equipo no lo soporta, se graba sin él.</span></span>
+                <span>System audio<span className="picker__option-hint">The sound from your PC (loopback). If your device doesn't support it, the recording proceeds without it.</span></span>
               </label>
             </>
           )}

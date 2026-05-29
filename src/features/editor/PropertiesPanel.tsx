@@ -1,10 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { MousePointerClick, Clock, Maximize, Save, Image as ImageIcon, Gauge, Trash2, Film, MousePointer2, Crop, ChevronDown, Music } from 'lucide-react';
+import { MousePointerClick, Clock, Maximize, Save, Image as ImageIcon, Gauge, Trash2, Film, MousePointer2, Crop, ChevronDown, Music, Upload, Video } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { useHistoryStore } from '@/stores/history';
 import { useSelectionStore } from '@/stores/selection';
 import { useUiStore } from '@/stores/ui';
 import { BACKGROUND_PRESETS } from './backgrounds';
+import { customPresetId, useCustomBackgrounds } from './useCustomBackgrounds';
 import type { Project } from '@shared/types/project';
 
 const SPEED_PRESETS = [0.5, 1, 1.5, 2, 3, 4];
@@ -128,18 +129,7 @@ export function PropertiesPanel() {
       <ClipSection />
 
       <CollapsibleSection id="bg" title="Backgrounds" icon={<ImageIcon size={14} />} defaultOpen>
-        <div className="bg-grid">
-          {BACKGROUND_PRESETS.map((p) => (
-            <button
-              key={p.id}
-              className={`bg-tile ${bg.presetId === p.id ? 'bg-tile--active' : ''}`}
-              style={{ background: p.css }}
-              onClick={() => update((d) => { d.background.presetId = p.id; }, { label: `Background: ${p.name}` })}
-              title={p.name}
-              aria-label={p.name}
-            />
-          ))}
-        </div>
+        <BackgroundLibrary activeId={bg.presetId} onPick={(id, label) => update((d) => { d.background.presetId = id; }, { label: `Background: ${label}` })} />
       </CollapsibleSection>
 
       <CollapsibleSection id="layout" title="Layout" icon={<Maximize size={14} />}>
@@ -195,10 +185,7 @@ export function PropertiesPanel() {
 
       <div className="panel__phase">
         <Save size={14} />
-        <span>
-          Phase 3 complete. Auto-zoom appears in the timeline in Phase 4; trim/speed in Phase 5; export in Phase 6.
-          {dirty ? ' Unsaved changes pending autosave…' : ' All edits saved.'}
-        </span>
+        <span>{dirty ? 'Saving…' : 'All changes saved'}</span>
       </div>
     </aside>
   );
@@ -281,16 +268,16 @@ function CropSection() {
   const clipsCount = useProjectStore((s) => s.project?.clips.length ?? 0);
   if (clipsCount === 0) return null;
   return (
-    <CollapsibleSection id="crop" title="Recorte & aspecto" icon={<Crop size={14} />}>
+    <CollapsibleSection id="crop" title="Crop & aspect" icon={<Crop size={14} />}>
       <p className="panel__hint">
-        Recortá el frame para sacar lo que no querés mostrar (la barra de Windows, el chrome del navegador, etc). Arrastrá los bordes en el preview; libre o con relación de aspecto fija.
+        Crop the frame to hide anything you don't want on screen (taskbar, browser chrome, etc). Drag the handles on the preview — free-form or with a locked aspect ratio.
       </p>
       <button
         className={`btn btn--small ${cropEditMode ? 'btn--accent' : ''}`}
         style={{ width: '100%', justifyContent: 'center' }}
         onClick={() => setCropEditMode(!cropEditMode)}
       >
-        <Crop size={14} /> {cropEditMode ? 'Terminar recorte' : 'Editar recorte / aspecto'}
+        <Crop size={14} /> {cropEditMode ? 'Finish crop' : 'Edit crop / aspect ratio'}
       </button>
     </CollapsibleSection>
   );
@@ -313,35 +300,35 @@ function CursorSection() {
       <div className="panel__field">
         <label className="panel__label">Estilo</label>
         <div className="cursor-style-grid">
-          <CursorStyleBtn current={style} value="hidden" label="Oculto"
+          <CursorStyleBtn current={style} value="hidden" label="Hidden"
             onPick={(v) => update((d) => { d.cursor.style = v; }, { label: 'Cursor style' })} />
           <CursorStyleBtn current={style} value="pulse" label="Pulse"
             onPick={(v) => update((d) => { d.cursor.style = v; }, { label: 'Cursor style' })} />
           <CursorStyleBtn current={style} value="dot" label="Dot"
             onPick={(v) => update((d) => { d.cursor.style = v; }, { label: 'Cursor style' })} />
-          <CursorStyleBtn current={style} value="arrow" label="Flecha"
+          <CursorStyleBtn current={style} value="arrow" label="Arrow"
             onPick={(v) => update((d) => { d.cursor.style = v; }, { label: 'Cursor style' })} />
         </div>
       </div>
 
       {(isFollower || style === 'pulse') && (
         <p className="panel__hint">
-          {style === 'pulse' && 'Anillo animado en cada clic. Sin follower — ideal cuando el video ya tiene el cursor de Windows.'}
-          {style === 'dot' && 'Punto que sigue al mouse y crece al hacer clic.'}
-          {style === 'arrow' && 'Flecha estilo Screen Studio que sigue al mouse y crece al hacer clic. Pensada para grabaciones SIN cursor del sistema.'}
+          {style === 'pulse' && 'Animated ring on each click. No follower — best when the recording already shows the system cursor.'}
+          {style === 'dot' && 'A dot follows the mouse and scales up on click.'}
+          {style === 'arrow' && 'A pointer arrow follows the mouse and scales up on click. Pair with recordings made WITHOUT the system cursor.'}
         </p>
       )}
 
       {isFollower && (
         <>
           <ColorField
-            label={style === 'arrow' ? 'Color de relleno' : 'Color'}
+            label={style === 'arrow' ? 'Fill color' : 'Color'}
             value={cursor.color}
             onCommit={(v) => update((d) => { d.cursor.color = v; }, { label: 'Cursor color' })}
           />
           {style === 'arrow' && (
             <ColorField
-              label="Color del borde"
+              label="Outline color"
               value={cursor.outlineColor}
               onCommit={(v) => update((d) => { d.cursor.outlineColor = v; }, { label: 'Cursor outline color' })}
             />
@@ -378,13 +365,13 @@ function CursorSection() {
               checked={cursor.click.enabled}
               onChange={(e) => update((d) => { d.cursor.click.enabled = e.target.checked; }, { label: 'Click animation toggle' })}
             />
-            Animación al hacer clic
+            Click animation
           </label>
 
           {cursor.click.enabled && (
             <>
               <CursorSlider
-                label="Duración"
+                label="Duration"
                 value={cursor.click.durationMs}
                 min={150} max={800} step={10} suffix="ms"
                 read={(c) => c.click.durationMs}
@@ -393,12 +380,12 @@ function CursorSection() {
               {style === 'pulse' && (
                 <>
                   <ColorField
-                    label="Color del anillo"
+                    label="Ring color"
                     value={cursor.click.pulseColor}
                     onCommit={(v) => update((d) => { d.cursor.click.pulseColor = v; }, { label: 'Pulse color' })}
                   />
                   <CursorSlider
-                    label="Radio máximo"
+                    label="Max radius"
                     value={cursor.click.pulseMaxSizePx}
                     min={10} max={120} step={1} suffix="px"
                     read={(c) => c.click.pulseMaxSizePx}
@@ -408,7 +395,7 @@ function CursorSection() {
               )}
               {isFollower && (
                 <CursorSlider
-                  label="Pico de escala"
+                  label="Peak scale"
                   value={cursor.click.peakScale}
                   min={1} max={2.5} step={0.05} suffix="×"
                   read={(c) => c.click.peakScale}
@@ -580,7 +567,7 @@ function ClipSection() {
     if (!projectPath || !clip.hasAudio) return;
     try {
       const media = await window.videoZoom.project.extractClipAudio(projectPath, clip.filePath);
-      if (!media) { window.alert('Este clip no tiene audio para extraer.'); return; }
+      if (!media) { window.alert('This clip has no audio to extract.'); return; }
       update((d) => {
         d.audioPool.push(media);
         // Place the extracted audio at the clip's timeline position, matching
@@ -602,7 +589,7 @@ function ClipSection() {
         }
       }, { label: 'Extract clip audio' });
     } catch (err) {
-      window.alert(`No se pudo extraer el audio: ${(err as Error).message}`);
+      window.alert(`Could not extract audio: ${(err as Error).message}`);
     }
   };
 
@@ -690,7 +677,7 @@ function ClipSection() {
 
       {clip.hasAudio && (
         <>
-          <h4 className="panel__subtitle" style={{ marginTop: 14 }}>Audio del clip</h4>
+          <h4 className="panel__subtitle" style={{ marginTop: 14 }}>Clip audio</h4>
           <label className="panel__checkbox">
             <input
               type="checkbox"
@@ -700,18 +687,113 @@ function ClipSection() {
                 if (c) c.audioMuted = e.target.checked;
               }, { label: 'Mute clip audio' })}
             />
-            Silenciar audio del clip
+            Mute the clip's audio
           </label>
           <button
             className="btn btn--small"
             style={{ width: '100%', justifyContent: 'center' }}
             onClick={extractAudio}
-            title="Saca el audio del clip a la pista de audio para editarlo aparte"
+            title="Extract this clip's audio to its own track to edit it separately"
           >
-            <Music size={14} /> Extraer audio a la pista
+            <Music size={14} /> Extract audio to track
           </button>
         </>
       )}
     </CollapsibleSection>
+  );
+}
+
+/**
+ * Background library: built-in presets + user-imported images / videos.
+ * Imported assets are persisted app-wide (not per project) so the user keeps
+ * their library across recordings.
+ */
+function BackgroundLibrary({ activeId, onPick }: { activeId: string; onPick: (presetId: string, displayName: string) => void }) {
+  const { entries, importBackground, deleteBackground } = useCustomBackgrounds();
+  const [busy, setBusy] = useState(false);
+
+  const onImport = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const created = await importBackground();
+      if (created) onPick(customPresetId(created.id), created.name);
+    } catch (err) {
+      window.alert(`Could not import background: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async (id: string, name: string): Promise<void> => {
+    if (!window.confirm(`Delete custom background "${name}"? This cannot be undone.`)) return;
+    try {
+      await deleteBackground(id);
+    } catch (err) {
+      window.alert(`Could not delete background: ${(err as Error).message}`);
+    }
+  };
+
+  return (
+    <>
+      <div className="bg-grid">
+        {BACKGROUND_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            className={`bg-tile ${activeId === p.id ? 'bg-tile--active' : ''}`}
+            style={{ background: p.css }}
+            onClick={() => onPick(p.id, p.name)}
+            title={p.name}
+            aria-label={p.name}
+          />
+        ))}
+      </div>
+
+      {entries.length > 0 && (
+        <>
+          <div className="bg-library__sep">My library</div>
+          <div className="bg-grid">
+            {entries.map((e) => {
+              const id = customPresetId(e.id);
+              const isActive = activeId === id;
+              return (
+                <div key={e.id} className={`bg-tile-wrap ${isActive ? 'bg-tile-wrap--active' : ''}`}>
+                  <button
+                    className={`bg-tile bg-tile--custom ${isActive ? 'bg-tile--active' : ''}`}
+                    onClick={() => onPick(id, e.name)}
+                    title={e.name}
+                    aria-label={e.name}
+                  >
+                    {e.kind === 'video' ? (
+                      <video src={e.assetUrl} muted loop autoPlay playsInline className="bg-tile__media" />
+                    ) : (
+                      <img src={e.assetUrl} alt={e.name} className="bg-tile__media" />
+                    )}
+                    <span className="bg-tile__kind">{e.kind === 'video' ? <Video size={11} /> : <ImageIcon size={11} />}</span>
+                  </button>
+                  <button
+                    className="bg-tile__delete"
+                    onClick={(ev) => { ev.stopPropagation(); onDelete(e.id, e.name); }}
+                    title="Remove from library"
+                    aria-label="Delete custom background"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <button
+        className="btn btn--small bg-library__import"
+        onClick={onImport}
+        disabled={busy}
+        title="Import an image or video to use as a background. Saved app-wide."
+      >
+        <Upload size={13} /> {busy ? 'Importing…' : 'Import image or video'}
+      </button>
+    </>
   );
 }

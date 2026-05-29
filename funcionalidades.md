@@ -219,8 +219,9 @@ Proyectos creados pre-5A en `schemaVersion: 1` (con `sourceVideo` y `mouseEvents
 
 ## 7. Backgrounds
 
-10 presets en el panel derecho (toggleable la sección con click en "Backgrounds ▾"):
+**26+ presets** en el panel derecho (toggleable la sección con click en "Backgrounds ▾") + **librería de imports propios** persistente entre proyectos.
 
+**Presets built-in (clásicos)**:
 1. Sunset Gradient (default) — naranja → rosa
 2. Ocean Mesh — azul → violeta
 3. macOS Sonoma — pastel multi-stop
@@ -231,6 +232,36 @@ Proyectos creados pre-5A en `schemaVersion: 1` (con `sourceVideo` y `mouseEvents
 8. Forest Mint — verde
 9. Dotted Grid Light — puntos sobre blanco
 10. Linear Glow — azul → magenta
+
+**Presets divergentes (v0.1.2+)**:
+11. **Aurora** — bandas verde/violeta tipo aurora boreal sobre cielo estrellado.
+12. **Synthwave Horizon** — sol retro con stripes + grid de horizonte.
+13. **Neon Grid** — cuadrícula cyan sobre fondo violeta, glow rosa.
+14. **Starfield** — campo de estrellas con cálidas dispersas.
+15. **Liquid Blobs** — manchas orgánicas multi-color.
+16. **Plasma** — campo sinusoidal multi-color (efecto demoscene).
+17. **Carbon Fiber** — tile diagonal oscuro.
+18. **Topographic** — curvas de nivel sobre crema (mapa topográfico).
+19. **Hexagons** — panal sobre azul slate.
+20. **Wave Mesh** — líneas sinusoidales sobre azul profundo.
+21. **Vaporwave** — pink/violeta/cyan + grid floor + scanlines.
+22. **Matrix Rain** — caracteres katakana cayendo en verde.
+23. **Paper Grid** — papel de gráfica.
+24. **Terrazzo** — pebbles de colores random sobre crema.
+25. **Dot Storm** — dots multi-color con dispersión radial.
+26. **Blueprint** — plano arquitectónico azul rey + grid.
+27. **Circuit Board** — pistas de PCB en verde sobre fondo oscuro.
+28. **Solid Cream** / 29. **Solid Slate** — sólidos extra.
+30. **Cyber Sunset** — multi-stop dramático.
+31. **Midnight Aurora** — radial verde sobre azul profundo.
+
+### Librería personal (Import)
+
+Botón **"Import image or video"** debajo del grid. Importás cualquier:
+- **Imagen estática** (PNG, JPG, JPEG, WebP, GIF).
+- **Video animado** (MP4, WebM, MOV, MKV) — corre en loop como fondo (estilo Wallpaper Engine).
+
+Los archivos se copian a `%APPDATA%/VideoZoom/backgrounds/` y un índice JSON los recuerda — quedan **persistidos app-wide**, no dentro del `.vzproj`, así los compartís entre proyectos. Cada tile imported muestra un icono ![image] o ![video] en la esquina; hover muestra la X para borrarlo de la librería.
 
 ### Layout (ajustes del video sobre el background)
 
@@ -482,6 +513,8 @@ El render reproduce el timeline completo en tiempo real (tarda ≈ el largo del 
 ### Auto-update (electron-updater + GitHub Releases)
 - `publish` en `electron-builder.yml` apunta a `github.com/eflores1989/clipclicks` con `releaseType: release` (se publica directo, sin paso manual de "Publish"). `npm run release` (con `GH_TOKEN` = token clásico con scope `repo`) sube instalador + `latest.yml` + `.blockmap` a un Release publicado.
 - `electron/main/updater.ts`: SOLO en builds empaquetados, chequea al arrancar (a los 4s) y cada 30 min, descarga en background y avisa al renderer. `UpdateBanner.tsx` muestra "Actualización lista — Reiniciar" → `quitAndInstall`. **No hay botón de "buscar actualizaciones"**: es automático (relanzá la app para forzar un chequeo).
+- La **versión instalada** se muestra en el footer del launcher ("Clipclicks Studio vX.Y.Z", desde `app.getVersion()`) — sirve de trazabilidad para QA.
+- **El repo debe ser PÚBLICO** para que el auto-update lea `latest.yml` sin token (si es privado, el chequeo falla en silencio). Clipclicks/eflores1989 es público.
 - Flujo QA: publicás v0.1.0 → instalan → publicás v0.1.1 → la app instalada detecta y se actualiza.
 
 ---

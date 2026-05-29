@@ -6,10 +6,10 @@ import { clipEffectiveDurationMs } from '@shared/lib/clipTime';
 import type { Project, Transition, TransitionKind } from '@shared/types/project';
 
 const KIND_OPTIONS: { value: TransitionKind; label: string }[] = [
-  { value: 'fade', label: 'Fade (desvanecer)' },
-  { value: 'darken', label: 'Oscurecer (a negro)' },
-  { value: 'flash', label: 'Flash (a blanco)' },
-  { value: 'pixelate', label: 'Pixelado' },
+  { value: 'fade', label: 'Fade' },
+  { value: 'darken', label: 'Darken (to black)' },
+  { value: 'flash', label: 'Flash (to white)' },
+  { value: 'pixelate', label: 'Pixelate' },
 ];
 
 /**
@@ -54,25 +54,25 @@ export function TransitionProperties() {
         <div className="zoom-prop__header">
           <h3 className="panel__title">
             <Blend size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-            Transición {sel.edge === 'in' ? '(entrada)' : '(salida)'}
+            Transition {sel.edge === 'in' ? '(in)' : '(out)'}
           </h3>
-          <button className="icon-btn icon-btn--danger" onClick={remove} title="Quitar transición" aria-label="Remove transition">
+          <button className="icon-btn icon-btn--danger" onClick={remove} title="Remove transition" aria-label="Remove transition">
             <Trash2 size={14} />
           </button>
         </div>
         <p className="panel__hint">
-          {sel.edge === 'in' ? 'Sobre el comienzo del clip.' : 'Sobre el final del clip.'} Para un cruce A→B, poné salida en A y entrada en B del mismo tipo.
+          {sel.edge === 'in' ? 'On the clip start.' : 'On the clip end.'} For an A→B crossfade, set the same type as out on A and in on B.
         </p>
 
         <div className="panel__field">
-          <label className="panel__label">Tipo</label>
+          <label className="panel__label">Type</label>
           <select className="panel__select" value={t.kind} onChange={(e) => patch((tr) => { tr.kind = e.target.value as TransitionKind; }, 'Transition type')}>
             {KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
 
         <div className="panel__field">
-          <label className="panel__label">Duración <span className="panel__num">{(t.durationMs / 1000).toFixed(2)}s</span></label>
+          <label className="panel__label">Duration <span className="panel__num">{(t.durationMs / 1000).toFixed(2)}s</span></label>
           <input
             type="range" min={100} max={maxMs} step={50}
             value={Math.min(t.durationMs, maxMs)}

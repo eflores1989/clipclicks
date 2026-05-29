@@ -22,14 +22,14 @@ const RESOLUTIONS: { value: ExportResolution; label: string }[] = [
 // `crf`/`wbFactor` drive the realtime path; `detFactor` is the H.264 bitrate
 // factor (× w·h·fps) for the deterministic encoder (its final quality).
 const VQUALITY: { value: string; label: string; crf: number; wbFactor: number; detFactor: number }[] = [
-  { value: 'high', label: 'Alta (máxima)', crf: 16, wbFactor: 0.30, detFactor: 0.18 },
-  { value: 'medium', label: 'Media', crf: 20, wbFactor: 0.18, detFactor: 0.11 },
-  { value: 'low', label: 'Baja (liviano)', crf: 24, wbFactor: 0.10, detFactor: 0.06 },
+  { value: 'high', label: 'High (best)', crf: 16, wbFactor: 0.30, detFactor: 0.18 },
+  { value: 'medium', label: 'Medium', crf: 20, wbFactor: 0.18, detFactor: 0.11 },
+  { value: 'low', label: 'Low (lighter file)', crf: 24, wbFactor: 0.10, detFactor: 0.06 },
 ];
 const AQUALITY: { value: string; label: string; kbps: number }[] = [
-  { value: 'high', label: 'Alta (256k)', kbps: 256 },
-  { value: 'medium', label: 'Media (192k)', kbps: 192 },
-  { value: 'low', label: 'Baja (128k)', kbps: 128 },
+  { value: 'high', label: 'High (256k)', kbps: 256 },
+  { value: 'medium', label: 'Medium (192k)', kbps: 192 },
+  { value: 'low', label: 'Low (128k)', kbps: 128 },
 ];
 
 const even = (n: number): number => Math.max(2, Math.round(n / 2) * 2);
@@ -158,27 +158,27 @@ export function ExportDialog() {
 
   return (
     <div className="export-overlay" onPointerDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="export-dialog" role="dialog" aria-label="Exportar video">
+      <div className="export-dialog" role="dialog" aria-label="Export video">
         <header className="export-dialog__header">
-          <h2>Exportar a MP4</h2>
-          <button className="icon-btn" onClick={close} disabled={busy} aria-label="Cerrar"><X size={18} /></button>
+          <h2>Export to MP4</h2>
+          <button className="icon-btn" onClick={close} disabled={busy} aria-label="Close"><X size={18} /></button>
         </header>
 
         {status === 'idle' && (
           <>
             <div className="export-dialog__body">
-              <Field label="Método">
+              <Field label="Method">
                 <div className="export-seg">
-                  <button className={`export-seg__btn ${method === 'realtime' ? 'export-seg__btn--on' : ''}`} onClick={() => setMethod('realtime')} title="Captura en tiempo real (rápido, ideal 1080p)">Rápido</button>
-                  <button className={`export-seg__btn ${method === 'deterministic' ? 'export-seg__btn--on' : ''}`} onClick={() => setMethod('deterministic')} title="Cuadro por cuadro (calidad full a cualquier resolución, más lento)">Alta calidad</button>
+                  <button className={`export-seg__btn ${method === 'realtime' ? 'export-seg__btn--on' : ''}`} onClick={() => setMethod('realtime')} title="Realtime capture (fast, ideal for 1080p)">Fast</button>
+                  <button className={`export-seg__btn ${method === 'deterministic' ? 'export-seg__btn--on' : ''}`} onClick={() => setMethod('deterministic')} title="Frame-by-frame (full quality at any resolution, slower)">High quality</button>
                 </div>
               </Field>
-              <Field label="Resolución">
+              <Field label="Resolution">
                 <select className="panel__select" value={resolution} onChange={(e) => setResolution(e.target.value as ExportResolution)}>
                   {RESOLUTIONS.map((r) => {
                     // Realtime can't upscale above the source; deterministic can.
                     const tooBig = method === 'realtime' && r.value !== 'source' && presetHeight[r.value] > sourceHeight + 1;
-                    return <option key={r.value} value={r.value} disabled={tooBig}>{r.label}{tooBig ? ' — mayor que la fuente' : ''}</option>;
+                    return <option key={r.value} value={r.value} disabled={tooBig}>{r.label}{tooBig ? ' — larger than source' : ''}</option>;
                   })}
                 </select>
               </Field>
@@ -189,29 +189,29 @@ export function ExportDialog() {
                   ))}
                 </div>
               </Field>
-              <Field label="Calidad de video">
+              <Field label="Video quality">
                 <select className="panel__select" value={vQuality} onChange={(e) => setVQuality(e.target.value)}>
                   {VQUALITY.map((q) => <option key={q.value} value={q.value}>{q.label}</option>)}
                 </select>
               </Field>
-              <Field label="Calidad de audio">
+              <Field label="Audio quality">
                 <select className="panel__select" value={aQuality} onChange={(e) => setAQuality(e.target.value)} disabled={!includeAudio}>
                   {AQUALITY.map((q) => <option key={q.value} value={q.value}>{q.label}</option>)}
                 </select>
               </Field>
               <label className="panel__checkbox">
                 <input type="checkbox" checked={includeAudio} onChange={(e) => setIncludeAudio(e.target.checked)} />
-                Incluir audio (clips + pistas de audio)
+                Include audio (clips + audio tracks)
               </label>
               <p className="panel__hint">
                 {method === 'realtime'
-                  ? 'Rápido: captura en tiempo real (tarda ≈ el largo del video). Ideal 1080p. No cambies de pestaña mientras exporta.'
-                  : 'Alta calidad: render cuadro por cuadro (determinista). Fluido y nítido a cualquier resolución incl. 4K, pero más lento.'}
+                  ? 'Fast: realtime capture (takes about as long as the video). Ideal for 1080p. Keep this window in focus while exporting.'
+                  : 'High quality: deterministic frame-by-frame render. Smooth and crisp at any resolution including 4K, but slower.'}
               </p>
             </div>
             <footer className="export-dialog__footer">
-              <button className="btn" onClick={close}>Cancelar</button>
-              <button className="btn btn--accent" onClick={run}><Download size={15} /> Exportar</button>
+              <button className="btn" onClick={close}>Cancel</button>
+              <button className="btn btn--accent" onClick={run}><Download size={15} /> Export</button>
             </footer>
           </>
         )}
@@ -221,39 +221,39 @@ export function ExportDialog() {
             <Loader2 size={28} className="spin" />
             <p className="export-dialog__stage">
               {status === 'rendering'
-                ? (method === 'deterministic' ? 'Codificando cuadro por cuadro…' : 'Componiendo el timeline…')
-                : 'Finalizando MP4…'}
+                ? (method === 'deterministic' ? 'Encoding frame by frame…' : 'Composing the timeline…')
+                : 'Finishing MP4…'}
             </p>
             <div className="export-bar"><div className="export-bar__fill" style={{ width: `${Math.round(percent)}%` }} /></div>
             <span className="export-dialog__pct">{Math.round(percent)}%</span>
-            <button className="btn btn--small" onClick={cancel}>Cancelar</button>
+            <button className="btn btn--small" onClick={cancel}>Cancel</button>
           </div>
         )}
 
         {status === 'done' && outputPath && (
           <div className="export-dialog__done">
             <CheckCircle2 size={32} className="export-dialog__ok" />
-            <p>¡Listo! Se guardó en:</p>
+            <p>Done! Saved to:</p>
             <code className="export-dialog__path">{outputPath}</code>
             <div className="export-dialog__done-actions">
-              <button className="btn" onClick={() => window.videoZoom.export.revealFile(outputPath)}><FolderOpen size={15} /> Abrir carpeta</button>
-              <button className="btn btn--accent" onClick={() => window.videoZoom.export.openFile(outputPath)}><Play size={15} /> Reproducir</button>
+              <button className="btn" onClick={() => window.videoZoom.export.revealFile(outputPath)}><FolderOpen size={15} /> Open folder</button>
+              <button className="btn btn--accent" onClick={() => window.videoZoom.export.openFile(outputPath)}><Play size={15} /> Play</button>
             </div>
-            <button className="btn btn--small" onClick={() => exportStore.getState().reset()}>Exportar otro</button>
+            <button className="btn btn--small" onClick={() => exportStore.getState().reset()}>Export another</button>
           </div>
         )}
 
         {status === 'cancelled' && (
           <div className="export-dialog__done">
-            <p>Exportación cancelada.</p>
-            <button className="btn" onClick={() => exportStore.getState().reset()}>Volver</button>
+            <p>Export cancelled.</p>
+            <button className="btn" onClick={() => exportStore.getState().reset()}>Back</button>
           </div>
         )}
 
         {status === 'error' && (
           <div className="export-dialog__done">
             <AlertTriangle size={28} className="export-dialog__err" />
-            <p>No se pudo exportar.</p>
+            <p>Export failed.</p>
             <code className="export-dialog__path">{error}</code>
             <button className="btn" onClick={() => exportStore.getState().reset()}>Volver</button>
           </div>

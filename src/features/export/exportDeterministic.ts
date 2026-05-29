@@ -55,7 +55,7 @@ function whenVideoMeta(v: HTMLVideoElement): Promise<void> {
  */
 export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Promise<Uint8Array> {
   const { project, projectPath, width, height, fps, videoBitrate, totalMs, resolveUrl, onProgress, shouldCancel } = opts;
-  if (!ENCODER_AVAILABLE) throw new Error('WebCodecs (VideoEncoder) no está disponible en este entorno.');
+  if (!ENCODER_AVAILABLE) throw new Error('WebCodecs (VideoEncoder) is not available in this environment.');
 
   // AVCC output (default) so mp4-muxer gets the avcC description in the chunk meta.
   const candidates = ['avc1.640034', 'avc1.640033', 'avc1.640028', 'avc1.4D4028', 'avc1.42E01E'];
@@ -66,7 +66,7 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
       if (support.supported) { codec = c; break; }
     } catch { /* try next */ }
   }
-  if (!codec) throw new Error('Tu sistema no soporta codificar H.264 vía WebCodecs.');
+  if (!codec) throw new Error('This system does not support encoding H.264 via WebCodecs.');
 
   const abs = (rel: string): string => `${projectPath}/${rel}`.replace(/\\/g, '/');
   const videoEls = new Map<string, HTMLVideoElement>();
@@ -175,7 +175,7 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
         if (shouldCancel()) throw new Error('CANCELLED');
         await new Promise((r) => setTimeout(r, 2));
         waited += 2;
-        if (waited > 15000) throw new Error('El codificador se atascó (frame ' + i + ').');
+        if (waited > 15000) throw new Error('The encoder stalled (frame ' + i + ').');
       }
       onProgress(((i + 1) / totalFrames) * 100);
     }

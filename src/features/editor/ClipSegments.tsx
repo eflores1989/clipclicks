@@ -214,7 +214,7 @@ export function ClipSegments({ durationMs }: { durationMs: number }) {
             onClick={(e) => onSegmentClick(e, c.id)}
             onPointerDown={(e) => onSegmentPointerDown(e, c.id)}
             title={isImage
-              ? `Imagen: ${(eff / 1000).toFixed(2)}s — arrastrá los bordes para alargar/acortar, el cuerpo para reordenar`
+              ? `Image: ${(eff / 1000).toFixed(2)}s — drag the edges to resize, the body to reorder`
               : `Clip ${i + 1}: ${(eff / 1000).toFixed(2)}s${speed !== 1 ? ` (${speed}×)` : ''} — drag to reorder`}
           >
             {isImage && (
@@ -235,7 +235,7 @@ export function ClipSegments({ durationMs }: { durationMs: number }) {
                   className={`clip-transition clip-transition--${edge} ${t ? 'clip-transition--set' : ''} ${sel ? 'clip-transition--selected' : ''}`}
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => onTransitionClick(e, c.id, edge)}
-                  title={t ? `Transición ${edge === 'in' ? 'de entrada' : 'de salida'} (${t.kind}, ${(t.durationMs / 1000).toFixed(1)}s) — click para quitar` : `Agregar transición ${edge === 'in' ? 'de entrada' : 'de salida'}`}
+                  title={t ? `${edge === 'in' ? 'In' : 'Out'} transition (${t.kind}, ${(t.durationMs / 1000).toFixed(1)}s) — click to remove` : `Add ${edge === 'in' ? 'in' : 'out'} transition`}
                 >
                   <Blend size={11} />
                 </button>

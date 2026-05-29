@@ -36,14 +36,17 @@ import {
   cancelProcessing,
   createProjectFromStaging,
   deleteAsset,
+  deleteCustomBackground,
   ensureProjectsRoot,
   extractClipAudio,
   importAudio,
+  importCustomBackground,
   importImage,
   saveImageAsset,
   saveRecordedAudio,
   isPathInsideAllowedRoots,
   listAllProjects,
+  listCustomBackgrounds,
   listRecentProjects,
   loadProject,
   openProjectDialog,
@@ -322,6 +325,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.EXPORT_REVEAL_FILE, (_evt, p: string) => shell.showItemInFolder(p));
   ipcMain.handle(IPC.EXPORT_OPEN_FILE, (_evt, p: string) => shell.openPath(p));
   ipcMain.handle(IPC.UPDATE_INSTALL, () => quitAndInstallUpdate());
+  ipcMain.handle(IPC.CUSTOM_BG_LIST, () => listCustomBackgrounds());
+  ipcMain.handle(IPC.CUSTOM_BG_IMPORT, () => importCustomBackground());
+  ipcMain.handle(IPC.CUSTOM_BG_DELETE, (_evt, id: string) => deleteCustomBackground(id));
   ipcMain.handle(IPC.PROJECT_IMPORT_IMAGE, async (_evt, projectPath: string) => importImage(projectPath));
   ipcMain.handle(
     IPC.PROJECT_SAVE_IMAGE_ASSET,
