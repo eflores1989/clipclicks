@@ -1,6 +1,6 @@
 # Clipclicks Studio — Funcionalidades
 
-Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.0** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, fix de barra de grabación y de aspect ratio de verticales). Sirve de checklist para verificar cada feature.
+Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.1** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, fix de barra de grabación y de aspect ratio de verticales). Sirve de checklist para verificar cada feature.
 
 > Convenciones: **negrita** = botón / atajo / nombre de UI. `código` = ruta, archivo o valor literal. Las secciones marcadas **🚧 pendiente** son features ya planificadas pero todavía no implementadas; vienen en sub-fases siguientes.
 
