@@ -9,9 +9,10 @@ import {
   type Renderer,
 } from 'pixi.js';
 import { DropShadowFilter, PixelateFilter } from 'pixi-filters';
-import type { BackgroundConfig, CursorConfig, TextEvent, TransitionKind, ZoomEvent } from '@shared/types/project';
+import type { BackgroundConfig, CursorConfig, TextEvent, TimerEvent, TransitionKind, ZoomEvent } from '@shared/types/project';
 import type { MouseEventRaw } from '@shared/types/recording';
 import { computeZoomState, IDENTITY_ZOOM, type ZoomState } from '@shared/lib/computeZoomState';
+import { timerText } from '@shared/lib/timerValue';
 import { cursorAt, newCursorCursor, type CursorCursor } from '@shared/lib/cursorAt';
 import { textRenderState } from '@shared/lib/textPresets';
 import { extractCustomId, getCustomBackground, getPreset, isCustomPresetId, onCustomBackgroundsChange, paintBackgroundToCanvas } from './backgrounds';
@@ -90,6 +91,7 @@ export class PixiScene {
   /** While true, render the FULL uncropped, unzoomed frame so the crop-editor
    * overlay can align its handles to the whole source. */
   private cropEditMode = false;
+  private trackEditMode = false;
   // Cursor rendering: a halo + dot follow the smoothed mouse position, and a
   // pulse Graphics is redrawn every frame with all click highlights whose
   // animation window contains currentMs (stateless — survives scrubbing).
@@ -103,6 +105,9 @@ export class PixiScene {
   // audio-only "black" zone past the video. One Pixi Text per event, cached.
   private textContainer: Container;
   private texts = new Map<string, { node: Text; lastContent: string; lastStyleKey: string }>();
+  // Timers share the top text layer. Cached like texts — one Pixi Text per timer,
+  // its content refreshed every frame from the integrated clock value.
+  private timers = new Map<string, { node: Text; lastContent: string; lastStyleKey: string }>();
   // Transition layer: a full-canvas color rect (darken/flash) sitting above the
   // video+background but below text. 'fade' uses the sprite alpha and 'pixelate'
   // a filter on the sprite, so they don't need the overlay.
@@ -271,6 +276,71 @@ export class PixiScene {
         this.textContainer.removeChild(entry.node);
         entry.node.destroy();
         this.texts.delete(id);
+      }
+    }
+  }
+
+  private buildTimerStyle(t: TimerEvent, fontSize: number): TextStyle {
+    return new TextStyle({
+      fontFamily: t.fontFamily,
+      fontSize,
+      fontWeight: t.bold ? '700' : '400',
+      fontStyle: t.italic ? 'italic' : 'normal',
+      fill: t.color,
+      align: 'center',
+      whiteSpace: 'pre',
+      dropShadow: t.shadow
+        ? { color: '#000000', alpha: 0.55, blur: Math.max(2, fontSize * 0.12), distance: Math.max(1, fontSize * 0.05), angle: Math.PI / 2 }
+        : false,
+    });
+  }
+
+  /**
+   * Render the timeline's chronometers for the current GLOBAL time. Mirrors
+   * `updateTexts`, but each node's content is the integrated clock value
+   * (see `timerText`), so it refreshes every frame while in range. A selected
+   * timer is shown even at rest so its drag overlay has something to track.
+   */
+  updateTimers(globalMs: number, events: TimerEvent[], selectedId?: string | null): void {
+    const present = new Set(events.map((e) => e.id));
+    for (const t of events) {
+      const inRange = globalMs >= t.startMs && globalMs <= t.endMs;
+      const showForEdit = selectedId === t.id && inRange;
+      const entry0 = this.timers.get(t.id);
+      if (!inRange && !showForEdit) {
+        if (entry0) entry0.node.visible = false;
+        continue;
+      }
+      const fontSize = Math.max(4, Math.round(t.fontScale * this.size.h));
+      const content = timerText(t, globalMs);
+      const styleKey = `${t.fontFamily}|${fontSize}|${t.bold}|${t.italic}|${t.color}|${t.shadow}`;
+      let entry = entry0;
+      if (!entry) {
+        const node = new Text({ text: content, style: this.buildTimerStyle(t, fontSize) });
+        node.anchor.set(0.5, 0.5);
+        this.textContainer.addChild(node);
+        entry = { node, lastContent: content, lastStyleKey: styleKey };
+        this.timers.set(t.id, entry);
+      }
+      if (entry.lastStyleKey !== styleKey) {
+        entry.node.style = this.buildTimerStyle(t, fontSize);
+        entry.lastStyleKey = styleKey;
+        entry.lastContent = ' '; // force a content refresh below
+      }
+      if (entry.lastContent !== content) {
+        entry.node.text = content;
+        entry.lastContent = content;
+      }
+      entry.node.alpha = 1;
+      entry.node.x = t.nx * this.size.w;
+      entry.node.y = t.ny * this.size.h;
+      entry.node.visible = true;
+    }
+    for (const [id, entry] of this.timers) {
+      if (!present.has(id)) {
+        this.textContainer.removeChild(entry.node);
+        entry.node.destroy();
+        this.timers.delete(id);
       }
     }
   }
@@ -561,9 +631,9 @@ export class PixiScene {
     const W = this.size.w - 2 * padX;
     const H = this.size.h - 2 * padY;
 
-    // Crop-edit mode: show the FULL frame fit to the padded area, no crop,
-    // no zoom. The overlay's handles map directly onto this rect.
-    if (this.cropEditMode) {
+    // Crop-edit / track-edit modes: show the FULL frame fit to the padded area,
+    // no crop, no zoom. The crop handles / focus dots map directly onto this rect.
+    if (this.cropEditMode || this.trackEditMode) {
       this.videoSprite.x = padX;
       this.videoSprite.y = padY;
       this.videoSprite.width = W;
@@ -587,10 +657,30 @@ export class PixiScene {
     const focalCanvasX = spriteX0 + state.focalNx * spriteW0;
     const focalCanvasY = spriteY0 + state.focalNy * spriteH0;
     const Z = state.scale;
-    this.videoSprite.width = spriteW0 * Z;
-    this.videoSprite.height = spriteH0 * Z;
-    this.videoSprite.x = focalCanvasX - state.focalNx * spriteW0 * Z;
-    this.videoSprite.y = focalCanvasY - state.focalNy * spriteH0 * Z;
+    const spriteWpx = spriteW0 * Z;
+    const spriteHpx = spriteH0 * Z;
+    this.videoSprite.width = spriteWpx;
+    this.videoSprite.height = spriteHpx;
+
+    // ANCHOR position: keep the focal point where it sits in the frame (classic
+    // click-zoom — zoom into the point in place).
+    const anchorX = focalCanvasX - state.focalNx * spriteWpx;
+    const anchorY = focalCanvasY - state.focalNy * spriteHpx;
+
+    // CENTER position: put the focal at the padded-area centre (camera "looks
+    // at" the point), clamped so the sprite still covers the window (no gaps).
+    const tightness = state.focalTightness ?? 0;
+    if (tightness > 0) {
+      const rawCenterX = padX + W / 2 - state.focalNx * spriteWpx;
+      const rawCenterY = padY + H / 2 - state.focalNy * spriteHpx;
+      const centerX = Math.max(padX + W - spriteWpx, Math.min(padX, rawCenterX));
+      const centerY = Math.max(padY + H - spriteHpx, Math.min(padY, rawCenterY));
+      this.videoSprite.x = anchorX + tightness * (centerX - anchorX);
+      this.videoSprite.y = anchorY + tightness * (centerY - anchorY);
+    } else {
+      this.videoSprite.x = anchorX;
+      this.videoSprite.y = anchorY;
+    }
   }
 
   /**
@@ -612,6 +702,12 @@ export class PixiScene {
   setCropEditMode(enabled: boolean): void {
     if (this.cropEditMode === enabled) return;
     this.cropEditMode = enabled;
+  }
+
+  /** Toggle the full-frame track-editing render (authoring a zoom's pan path). */
+  setTrackEditMode(enabled: boolean): void {
+    if (this.trackEditMode === enabled) return;
+    this.trackEditMode = enabled;
   }
 
   updateZoom(
@@ -658,7 +754,10 @@ export class PixiScene {
     this.cursorPulse.clear();
 
     if (!this.videoSprite || !this.lastBg) return;
-    if (this.cropEditMode) return; // crop editor shows the raw frame only
+    // Crop editor shows the raw frame only. Track editor KEEPS the cursor — you
+    // need to see it to follow it. (In track mode the sprite is the full frame,
+    // so the cursor still maps correctly.)
+    if (this.cropEditMode) return;
     if (cfg.style === 'hidden' || mouseEvents.length === 0) return;
 
     const bg = this.lastBg;
@@ -786,6 +885,10 @@ export class PixiScene {
         try { node.visible = false; this.textContainer.removeChild(node); } catch { /* ignore */ }
       }
       this.texts.clear();
+      for (const { node } of this.timers.values()) {
+        try { node.visible = false; this.textContainer.removeChild(node); } catch { /* ignore */ }
+      }
+      this.timers.clear();
       try { this.videoContainer.filters = []; } catch { /* ignore */ }
       try { if (this.videoSprite) this.videoSprite.filters = []; } catch { /* ignore */ }
       this.dropShadow = null;

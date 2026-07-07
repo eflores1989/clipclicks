@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Film, Plus, Trash2, MousePointerClick, Music, Upload, Loader2, Mic, Square, Type, Image as ImageIcon } from 'lucide-react';
+import { Film, Plus, Trash2, MousePointerClick, Music, Upload, Loader2, Mic, Square, Type, Image as ImageIcon, Timer as TimerIcon } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { usePlaybackStore } from '@/stores/playback';
 import { useSelectionStore } from '@/stores/selection';
+import { useUiStore } from '@/stores/ui';
 import { clipEffectiveDurationMs } from '@shared/lib/clipTime';
 import { makeTextEvent } from '@shared/lib/textPresets';
+import { makeTimerEvent } from '@shared/lib/timerValue';
 import { loadImageDims, makeImageClip, paintGradientPng, paintSolidPng } from './imageMedia';
 import { hideDropIndicator, showDropIndicator } from './dropIndicator';
 import type { Clip, ImageMedia, TextPreset } from '@shared/types/project';
@@ -24,7 +26,7 @@ function formatRecordedAt(epoch: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-type MediaSubtab = 'video' | 'audio' | 'images' | 'text';
+type MediaSubtab = 'video' | 'audio' | 'images' | 'text' | 'timer';
 
 export function MediaPool({ subtab }: { subtab: MediaSubtab }) {
   const mediaPool = useProjectStore((s) => s.project?.mediaPool ?? []);
@@ -148,23 +150,65 @@ export function MediaPool({ subtab }: { subtab: MediaSubtab }) {
   if (subtab === 'text') {
     return <TextPoolView />;
   }
+  if (subtab === 'timer') {
+    return <TimerPoolView />;
+  }
   if (subtab === 'images') {
     return <ImagePoolView />;
   }
 
-  if (mediaPool.length === 0) {
-    return (
-      <div className="media-pool__placeholder">
-        <p className="panel__hint">
-          The pool is empty. Deleted clips will appear here so you can restore them.
-        </p>
-      </div>
-    );
-  }
+  return <VideoPoolView mediaPool={mediaPool} onCardPointerDown={onCardPointerDown} restoreClipToEnd={restoreClipToEnd} deleteForever={deleteForever} />;
+}
+
+/**
+ * The "Video" media-pool subtab: an Import button (bring in an external
+ * recording as a new clip) plus the recycle bin of clips removed from the
+ * timeline (restore / delete forever). Importing routes through the shared
+ * "Preparing your project" view so the transcode shows a progress bar.
+ */
+function VideoPoolView({
+  mediaPool, onCardPointerDown, restoreClipToEnd, deleteForever,
+}: {
+  mediaPool: Clip[];
+  onCardPointerDown: (e: React.PointerEvent<HTMLElement>, clipId: string) => void;
+  restoreClipToEnd: (clipId: string) => void;
+  deleteForever: (clipId: string) => Promise<void>;
+}) {
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const update = useProjectStore((s) => s.update);
+  const selectClip = useSelectionStore((s) => s.selectClip);
+
+  const importVideo = useCallback(async () => {
+    if (!projectPath) return;
+    const ui = useUiStore.getState();
+    ui.setView('processing');
+    try {
+      const result = await window.videoZoom.project.importVideoAppend(projectPath);
+      if (!result) { ui.setView('editor'); return; }
+      update((d) => { d.clips.push(result.clip); }, { label: 'Import video' });
+      selectClip(result.clip.id);
+      ui.setView('editor');
+    } catch (err) {
+      const msg = (err as Error).message ?? '';
+      ui.setView('editor');
+      if (!msg.includes('CANCELLED')) window.alert(`Could not import the video: ${msg}`);
+    }
+  }, [projectPath, update, selectClip]);
 
   return (
     <div className="media-pool">
-      <ul className="media-pool__list">
+      <div className="media-pool__audio-actions">
+        <button className="btn btn--small btn--accent media-pool__import" onClick={importVideo} disabled={!projectPath}>
+          <Upload size={14} /> Import
+        </button>
+      </div>
+
+      {mediaPool.length === 0 ? (
+        <p className="panel__hint" style={{ marginTop: 12 }}>
+          Import an external recording to add it as a clip, or drag it onto the timeline. Clips removed from the timeline also land here so you can restore them.
+        </p>
+      ) : (
+      <ul className="media-pool__list" style={{ marginTop: 12 }}>
         {mediaPool.map((clip: Clip) => {
           const clickCount = clip.mouseEvents.filter((e) => e.type === 'down').length;
           return (
@@ -211,6 +255,7 @@ export function MediaPool({ subtab }: { subtab: MediaSubtab }) {
           );
         })}
       </ul>
+      )}
     </div>
   );
 }
@@ -435,6 +480,49 @@ function TextPoolView() {
             </div>
           </li>
         ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * The "Timer" media-pool subtab: drop an on-screen chronometer at the playhead.
+ * It starts counting from the point you place it and can be sped up / slowed
+ * down via rate keyframes in its properties panel. Reposition + style it like a
+ * text overlay.
+ */
+function TimerPoolView() {
+  const update = useProjectStore((s) => s.update);
+  const selectTimer = useSelectionStore((s) => s.selectTimer);
+
+  const addTimer = useCallback(() => {
+    const playhead = Math.max(0, Math.round(usePlaybackStore.getState().currentTimeMs));
+    const ev = makeTimerEvent(playhead);
+    update((d) => {
+      if (!d.timeline.timerEvents) d.timeline.timerEvents = [];
+      d.timeline.timerEvents.push(ev);
+    }, { label: 'Add timer' });
+    selectTimer(ev.id);
+  }, [update, selectTimer]);
+
+  return (
+    <div className="media-pool">
+      <p className="panel__hint" style={{ marginBottom: 10 }}>
+        Drop a chronometer at the playhead. It starts counting where you place it. In the panel choose count up/down, the format, and add speed keyframes to accelerate or slow it down. Drag it over the video to position it.
+      </p>
+      <ul className="media-pool__list">
+        <li className="media-pool__card" style={{ cursor: 'pointer' }} onClick={addTimer}>
+          <div className="media-pool__card-icon"><TimerIcon size={18} /></div>
+          <div className="media-pool__card-body">
+            <span className="media-pool__card-title">Timer</span>
+            <span className="media-pool__card-meta">Chronometer · count up / down</span>
+          </div>
+          <div className="media-pool__card-actions">
+            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); addTimer(); }} title="Add to timeline" aria-label="Add timer">
+              <Plus size={14} />
+            </button>
+          </div>
+        </li>
       </ul>
     </div>
   );

@@ -43,6 +43,12 @@ const api = {
     resume: (): Promise<void> => ipcRenderer.invoke(IPC.RECORDER_RESUME),
     save: (payload: RecordingSavePayload): Promise<RecordingSaveResult> =>
       ipcRenderer.invoke(IPC.RECORDER_SAVE, payload),
+    /** Subscribe to global recording hotkeys (F9 = pause/resume, F10 = stop). */
+    onHotkey: (cb: (action: 'toggle-pause' | 'stop') => void): Unsubscribe => {
+      const wrapped = (_e: Electron.IpcRendererEvent, action: 'toggle-pause' | 'stop'): void => cb(action);
+      ipcRenderer.on(IPC.RECORDER_HOTKEY, wrapped);
+      return () => ipcRenderer.removeListener(IPC.RECORDER_HOTKEY, wrapped);
+    },
   },
 
   window: {
@@ -94,6 +100,14 @@ const api = {
       height: number,
     ): Promise<ImageMedia> =>
       ipcRenderer.invoke(IPC.PROJECT_SAVE_IMAGE_ASSET, { projectPath, bytes, kind, name, width, height }),
+    /** Import an external video file as a brand-new project (launcher flow).
+     *  Returns null if the user cancelled the file dialog. */
+    importVideo: (): Promise<ProjectCreateResult | null> =>
+      ipcRenderer.invoke(IPC.PROJECT_IMPORT_VIDEO),
+    /** Import an external video file as a clip appended to the open project.
+     *  Returns null if the user cancelled the file dialog. */
+    importVideoAppend: (targetProjectPath: string): Promise<ProjectAppendClipResult | null> =>
+      ipcRenderer.invoke(IPC.PROJECT_IMPORT_VIDEO_APPEND, targetProjectPath),
     onCreateProgress: (cb: (progress: ProjectCreateProgress) => void): Unsubscribe => {
       const wrapped = (_e: Electron.IpcRendererEvent, p: ProjectCreateProgress): void => cb(p);
       ipcRenderer.on(IPC.PROJECT_CREATE_PROGRESS, wrapped);

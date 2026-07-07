@@ -81,6 +81,10 @@ export function SourcePicker() {
       <div className="countdown">
         <div className="countdown__number">{countdown === 0 ? 'Go' : countdown}</div>
         <div className="countdown__hint">Recording starts in…</div>
+        <div className="countdown__keys">
+          <span><kbd>F9</kbd> pause / resume</span>
+          <span><kbd>F10</kbd> stop</span>
+        </div>
       </div>
     );
   }

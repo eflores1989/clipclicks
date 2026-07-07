@@ -10,6 +10,7 @@ interface SelectionState {
   selectedClipId: string | null;
   selectedAudioId: string | null;
   selectedTextId: string | null;
+  selectedTimerId: string | null;
   selectedTransition: TransitionSel | null;
   hoveredEventId: string | null;
 
@@ -17,18 +18,20 @@ interface SelectionState {
   selectClip: (id: string | null) => void;
   selectAudio: (id: string | null) => void;
   selectText: (id: string | null) => void;
+  selectTimer: (id: string | null) => void;
   selectTransition: (sel: TransitionSel | null) => void;
   hoverEvent: (id: string | null) => void;
   clear: () => void;
 }
 
-const NONE = { selectedZoomId: null, selectedClipId: null, selectedAudioId: null, selectedTextId: null, selectedTransition: null };
+const NONE = { selectedZoomId: null, selectedClipId: null, selectedAudioId: null, selectedTextId: null, selectedTimerId: null, selectedTransition: null };
 
 export const useSelectionStore = create<SelectionState>((set) => ({
   selectedZoomId: null,
   selectedClipId: null,
   selectedAudioId: null,
   selectedTextId: null,
+  selectedTimerId: null,
   selectedTransition: null,
   hoveredEventId: null,
 
@@ -36,6 +39,7 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   selectClip: (id) => set({ ...NONE, selectedClipId: id }),
   selectAudio: (id) => set({ ...NONE, selectedAudioId: id }),
   selectText: (id) => set({ ...NONE, selectedTextId: id }),
+  selectTimer: (id) => set({ ...NONE, selectedTimerId: id }),
   selectTransition: (sel) => set({ ...NONE, selectedTransition: sel }),
   hoverEvent: (id) => set({ hoveredEventId: id }),
   clear: () => set({ ...NONE, hoveredEventId: null }),

@@ -95,6 +95,32 @@ export function Launcher() {
     }
   };
 
+  const handleImportVideo = async (): Promise<void> => {
+    setError(null);
+    // Switch to the processing view up front. The OS file dialog opens on top;
+    // if the user cancels it, importVideo resolves null and we return here.
+    setView('processing');
+    try {
+      const result = await window.videoZoom.project.importVideo();
+      if (!result) {
+        setView('launcher');
+        return;
+      }
+      const assetUrl = await window.videoZoom.project.assetUrl(result.videoAssetPath);
+      setLoaded({
+        project: result.project,
+        projectPath: result.projectPath,
+        videoAssetUrl: assetUrl,
+        thumbnailUrls: [],
+      });
+      setView('editor');
+    } catch (err) {
+      const msg = (err as Error).message ?? '';
+      if (!msg.includes('CANCELLED')) setError(`Could not import the video: ${msg}`);
+      setView('launcher');
+    }
+  };
+
   const openBrowser = (): void => {
     setBrowserOpen(true);
     setFilter('');
@@ -127,10 +153,10 @@ export function Launcher() {
             <span className="card__hint">Pick a screen or window</span>
           </button>
 
-          <button className="card card--disabled" disabled>
+          <button className="card" onClick={handleImportVideo} disabled={opening}>
             <FileVideo size={32} />
             <span className="card__title">Import video</span>
-            <span className="card__hint">Coming soon</span>
+            <span className="card__hint">Work on an existing recording</span>
           </button>
 
           <button className="card" onClick={openBrowser} disabled={opening}>

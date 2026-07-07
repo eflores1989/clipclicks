@@ -153,6 +153,51 @@ export function probeDurationMs(input: string): Promise<number | null> {
   });
 }
 
+export interface ProbedVideoMeta {
+  width: number;
+  height: number;
+  fps: number;
+  durationMs: number;
+  hasAudio: boolean;
+}
+
+/**
+ * Probe an arbitrary video file's dimensions, fps, duration and audio presence
+ * by parsing ffmpeg's stderr (`ffmpeg -i <file>`). Used by the "import video"
+ * flow, where — unlike a fresh recording — there is no capture stream to read
+ * metadata from. Returns sensible fallbacks for any field we can't parse.
+ */
+export function probeVideoMeta(input: string): Promise<ProbedVideoMeta> {
+  return new Promise((resolve) => {
+    // Zeros (not 1920×1080) mean "could not parse" — callers apply their own
+    // fallback. This matters for the load-time reconcile: assuming landscape
+    // here would clobber a correct portrait clip whenever a probe fails.
+    const fallback: ProbedVideoMeta = { width: 0, height: 0, fps: 0, durationMs: 0, hasAudio: false };
+    if (!existsSync(FFMPEG_PATH) || !existsSync(input)) { resolve(fallback); return; }
+    const proc = spawn(FFMPEG_PATH, ['-i', input], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    let stderr = '';
+    proc.stderr.on('data', (c: Buffer) => { stderr += c.toString('utf8'); });
+    proc.on('error', () => resolve(fallback));
+    proc.on('close', () => {
+      const meta: ProbedVideoMeta = { ...fallback };
+      const dur = stderr.match(/Duration:\s+(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+      if (dur) {
+        meta.durationMs =
+          (parseInt(dur[1], 10) * 3600 + parseInt(dur[2], 10) * 60 + parseInt(dur[3], 10)) * 1000 +
+          parseInt(dur[4], 10) * 10;
+      }
+      // First video stream: "Video: h264 ..., 1920x1080 ..., 30 fps" (the res
+      // token can carry a trailing SAR/DAR in [..], so match WxH loosely).
+      const v = stderr.match(/Stream #\d+:\d+.*: Video:.*?(\d{2,5})x(\d{2,5})/);
+      if (v) { meta.width = parseInt(v[1], 10); meta.height = parseInt(v[2], 10); }
+      const fps = stderr.match(/(\d+(?:\.\d+)?)\s*fps/);
+      if (fps) { const f = Math.round(parseFloat(fps[1])); if (f > 0 && f <= 240) meta.fps = f; }
+      meta.hasAudio = /Stream #\d+:\d+.*: Audio:/.test(stderr);
+      resolve(meta);
+    });
+  });
+}
+
 /**
  * Mux an audio file into a video file (copying the video stream, encoding the
  * audio to AAC) and write the result to `output`. Used by the native (gdigrab)

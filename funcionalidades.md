@@ -1,6 +1,6 @@
 # Clipclicks Studio — Funcionalidades
 
-Manual completo de lo que la app puede hacer hoy. Refleja el estado al cierre de **Fase 5C.5** (multi-clip + split + delete) y sirve de checklist para verificar cada feature.
+Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.0** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, fix de barra de grabación y de aspect ratio de verticales). Sirve de checklist para verificar cada feature.
 
 > Convenciones: **negrita** = botón / atajo / nombre de UI. `código` = ruta, archivo o valor literal. Las secciones marcadas **🚧 pendiente** son features ya planificadas pero todavía no implementadas; vienen en sub-fases siguientes.
 
@@ -38,7 +38,7 @@ Pantalla inicial al abrir la app. Tres tarjetas + lista de proyectos recientes.
 | Tarjeta | Estado | Acción |
 |---|---|---|
 | **New recording** | ✅ Funciona | Abre el source picker para grabar un proyecto nuevo |
-| **Import video** | 🚧 Deshabilitado | Pendiente: importar un .mp4/.webm como punto de partida |
+| **Import video** | ✅ Funciona | Importa un video externo (.mp4/.mov/.webm/.mkv/.avi/.m4v) como **proyecto nuevo**. Lo transcodifica a MP4 all-keyframes + thumbnails. Sin auto-zoom (no hay clics grabados) pero podés agregar zoom y **paneo/seguimiento manual**. Ver §4.5. |
 | **Open project** | ✅ Funciona | Abre un **browser de proyectos** (modal) que lista TODOS los `.vzproj` de la carpeta por su **nombre real** (de `project.json`, no el nombre de carpeta), con buscador. Botón "Buscar otra carpeta…" para el dialog nativo si el proyecto está en otro lado. |
 
 **Recent projects**: muestra los últimos 5 con nombre, **duración del timeline completo** (`max(video, audio)` — un audio de 4 min sobre un video de 18s muestra 4:00, no 0:18) y "hace X tiempo". Click en cualquiera abre el proyecto en el editor.
@@ -69,6 +69,8 @@ Al hacer click en Record, ves un countdown 3-2-1 en grande. Ese tiempo se descue
 
 - La ventana de la app se achica a una **barra flotante mini** (~240×56) que va a la esquina superior derecha, always-on-top, draggable arrastrando el cuerpo.
 - Muestra: tiempo transcurrido (mm:ss), botón ⏸ pause, botón ⏹ stop (rojo), botón ✕ cancel.
+- **La barra NO aparece en la grabación**: se le aplica `setContentProtection(true)` (en Windows = `WDA_EXCLUDEFROMCAPTURE`), así seguís viéndola y usando sus botones, pero queda excluida del video capturado. Salvedad: en el modo sin-cursor full-screen (ffmpeg gdigrab) un driver podría no respetarlo, por eso hay atajos globales de respaldo.
+- **Atajos globales** (funcionan aunque la app no tenga foco): **F9** pausa/reanuda, **F10** detiene. Se muestran en el countdown.
 - Si el hook global del mouse (`uiohook-napi`) falla a cargar, aparece un badge amarillo `!` — el video se graba igual pero sin eventos de clic, así que no habrá auto-zoom.
 
 ### Qué se captura
@@ -108,6 +110,23 @@ La vista de "Preparing your project" tiene un botón **"Cancel & discard"**. Sir
 - El flujo vuelve al launcher sin crear nada.
 
 Funciona tanto para grabación nueva (`createProjectFromStaging`) como para "Add recording" (`appendClipFromStaging`, que limpia solo el asset recién agregado, no el proyecto existente). Técnicamente: el ffmpeg killeado emite `SIGKILL` → la promesa de transcode rechaza con el sentinel `'CANCELLED'` → el renderer lo detecta y navega de vuelta sin mostrar error.
+
+---
+
+## 4.5 Importar video (✅)
+
+Trabajar sobre un video que **no** grabaste con ClipClicks (grabado con otro sistema, un celular, etc.).
+
+- **Desde el launcher** → tarjeta **Import video**: crea un **proyecto nuevo** con ese video como primer clip.
+- **Desde el editor** → panel **Media → Video → botón Import**: agrega el video como **clip adicional** al proyecto abierto.
+
+Formatos: `.mp4`, `.mov`, `.webm`, `.mkv`, `.avi`, `.m4v`. En ambos casos se transcodifica a MP4 all-keyframes (para scrubbing exacto) + thumbnails, reusando el mismo pipeline que la grabación pero con `mouseEvents: []`.
+
+**Qué tenés y qué no en un video importado:**
+- ✅ Zoom **manual**, **seguimiento/paneo manual** (§ tracking), backgrounds, padding, crop, velocidad, texto, cronómetro, audio, transiciones y export.
+- ❌ **Auto-zoom en clics** y **seguimiento automático del cursor**: dependen del registro de eventos del mouse que se captura al grabar. Un video externo no lo tiene. (Detectar los clics desde los píxeles = visión por computadora, fuera de alcance.)
+
+**Aspect ratio / verticales:** el import mide las dimensiones del MP4 **ya transcodificado** (post-rotación), y además al abrir cualquier proyecto se reconcilian las dimensiones de cada clip contra las reales del `<video>` decodificado. El preview usa `contain` (container-query units) para que un video **vertical** entre bien proporcionado y no se vea aplastado.
 
 ---
 
@@ -456,6 +475,41 @@ Una transición es un **efecto overlay sobre el borde de un clip** (entrada o sa
 - Aplica a clips de video **y de imagen**. Split reparte las transiciones (el borde nuevo del corte queda limpio); reorder las mantiene; todo es undoable + autosave.
 
 > Las transiciones se exportan junto con todo lo demás (ver §8 Export).
+
+---
+
+## 7.9 Cronómetro / Timer (✅)
+
+Un reloj en pantalla que corre durante el video — pensado para videos de soluciones/demos con tiempo.
+
+- **Agregar**: **Media → Timer → Timer** (se suelta en el playhead). Es un overlay del timeline global (como el texto), sale solo en el export.
+- **Panel de propiedades**:
+  - **Up / Down**: cuenta hacia arriba o hacia atrás (countdown).
+  - **Format**: `mm:ss`, `mm:ss.cs` (centésimas), `hh:mm:ss`, `ss`, `ss.cs`.
+  - **Start value (seconds)**: valor inicial (ej. 90 para arrancar en 1:30 en un countdown).
+  - **Stop at zero** (solo countdown): no pasa de 0.
+  - **Fuente, negrita/itálica, tamaño, color, sombra**.
+  - **Extend to end of video**: estira la duración del timer hasta el final. También podés arrastrar el borde derecho del chip en la fila **Timer** del timeline.
+- **Keyframes de velocidad**: "Add keyframe at playhead" + editar el multiplicador (×1, ×2, ×0.5…). Entre keyframes la velocidad interpola lineal → el reloj **acelera o frena** suave. Sin keyframes = tiempo real. (Integrador en `src/shared/lib/timerValue.ts`.)
+- **Ubicación**: arrastrás el timer sobre el video; las esquinas lo redimensionan.
+
+---
+
+## 7.10 Seguimiento / paneo de zoom (tracking — ✅)
+
+El "look cinematográfico": ya zoomeado, la cámara **panea siguiendo a un sujeto** (la flecha del mouse, un elemento) sin agregar más zoom. Funciona en **cualquier clip**, incluidos videos importados (no necesita el cursor grabado — vos definís el recorrido).
+
+- Se activa por zoom: seleccioná un zoom → panel **Zoom → Tracking (pan) → "Track on video…"**. El preview pasa a **cuadro completo** y podés marcar puntos.
+- **Flujo por tiempo** (para anclar cada punto a un momento):
+  1. Mové la barra **Time** (dentro del panel, propia del zoom → no deselecciona) al momento que querés; el frame te sigue.
+  2. Arrastrá el **dot "+"** sobre el sujeto → queda un **punto de foco anclado a ese tiempo**.
+  3. Repetí en otros momentos. Los puntos ya marcados son **dots numerados** (arrastrables para reubicar; su tiempo no cambia) y aparecen como ticks bajo la barra Time.
+  4. **Finish tracking** y reproducí: la cámara recorre los puntos con easeInOut por tramo (acelera/frena con un pequeño *settle* en cada punto).
+- **Controles**:
+  - **Approach**: cuánto se **centra** la cámara en cada punto (0 = lo deja en su lugar del cuadro; 100% = lo centra de lleno, "llega" al punto). Default 100%.
+  - **Pan speed**: qué tan rápido viaja entre puntos (el paneo arranca en el tiempo del punto 1).
+  - **Extra smoothing** (opcional, default 0): agrega un drift continuo tipo cámara en mano si lo subís.
+- Técnicamente: `ZoomEvent.focusKeyframes[]` interpolados en `computeZoomState.ts`; el transform mezcla anclar↔centrar según `panTightness`. Sale igual en el export.
 
 ---
 

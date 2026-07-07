@@ -197,6 +197,20 @@ export interface ZoomTarget {
   region?: { nx: number; ny: number; nw: number; nh: number };
 }
 
+/**
+ * A control point of a zoom's manual PAN path. `t` is the clip-local time (same
+ * space as ZoomEvent.startMs/endMs). `nx`/`ny` is the focal point (normalized
+ * frame coords, 0..1) at that time. When a zoom has ≥1 focus keyframe, the focal
+ * follows this hand-authored path — a cinematic pan that works on ANY clip
+ * (including imported videos with no recorded cursor). One keyframe ⇒ a fixed
+ * focal; several ⇒ eased interpolation between them.
+ */
+export interface FocusKeyframe {
+  t: Ms;
+  nx: number;
+  ny: number;
+}
+
 export interface ZoomEvent {
   id: UUID;
   source: 'auto' | 'manual';
@@ -213,6 +227,25 @@ export interface ZoomEvent {
   smoothing?: number;
   triggerEventIds?: number[];
   locked?: boolean;
+  /**
+   * Manual pan path. When present and non-empty it DRIVES the focal point
+   * (overriding `target` and `cursorBehavior`), giving the "camera follows the
+   * subject" look without any recorded cursor data. Points are sorted by `t`.
+   */
+  focusKeyframes?: FocusKeyframe[];
+  /**
+   * How much the camera CENTERS on each focus point (0..1). 0 = keep the point
+   * at its frame position (subtle, legacy). 1 = center on it as tightly as the
+   * fill allows (the camera "reaches" the point). Only used with focusKeyframes.
+   * Default 1.
+   */
+  panTightness?: number;
+  /**
+   * Playback speed multiplier of the pan path (only with focusKeyframes). 1 =
+   * traverse the keyframes at their authored times; >1 = faster; <1 = slower.
+   * Default 1.
+   */
+  panSpeed?: number;
 }
 
 /**
@@ -224,6 +257,57 @@ export interface Timeline {
   durationMs: Ms;
   markers: Marker[];
   textEvents: TextEvent[];
+  /** On-screen chronometers/stopwatches (see TimerEvent). Optional for projects
+   *  saved before timers existed — backfilled to [] on load. */
+  timerEvents?: TimerEvent[];
+}
+
+/** How a timer's numeric value is formatted for display. */
+export type TimerFormat = 'mm:ss' | 'mm:ss.cs' | 'hh:mm:ss' | 'ss' | 'ss.cs';
+
+/** A control point in a timer's speed curve. `rate` is the clock multiplier
+ *  (1 = real time, 2 = twice as fast, 0.5 = half). `tMs` is the offset from the
+ *  timer's `startMs`, in TIMELINE ms. Between keyframes the rate is linearly
+ *  interpolated (smooth accel/decel); before the first / after the last it holds
+ *  flat. Zero or one keyframe ⇒ a constant rate. */
+export interface TimerRateKeyframe {
+  tMs: Ms;
+  rate: number;
+}
+
+/**
+ * An on-screen chronometer overlaid on the GLOBAL timeline (lives in
+ * `Timeline.timerEvents`, like a text overlay). It appears at `startMs`,
+ * disappears at `endMs`, and displays a running clock that starts at
+ * `startValueMs` and advances (up) or descends (down) at a speed governed by
+ * `rateKeyframes` — so it can accelerate or slow down over its life. Position
+ * and size are normalized to the output canvas (resolution-independent), so the
+ * preview and the export agree.
+ */
+export interface TimerEvent {
+  id: UUID;
+  startMs: Ms;
+  endMs: Ms;
+  /** Clock value shown at `startMs`, in ms (e.g. 0, or 90000 for a 1:30 countdown). */
+  startValueMs: Ms;
+  direction: 'up' | 'down';
+  format: TimerFormat;
+  /** Speed curve over [startMs, endMs], offsets relative to startMs. */
+  rateKeyframes: TimerRateKeyframe[];
+  /** For countdowns: clamp the displayed value at 0 instead of going negative. */
+  stopAtZero: boolean;
+
+  /** Center of the timer in normalized canvas coords (0..1). */
+  nx: number;
+  ny: number;
+  /** Font size as a fraction of canvas HEIGHT (e.g. 0.1 = 10% of height). */
+  fontScale: number;
+  fontFamily: string;
+  bold: boolean;
+  italic: boolean;
+  color: string;
+  /** Soft drop shadow for legibility over busy backgrounds. */
+  shadow: boolean;
 }
 
 /** The three text "blocks" offered in the media pool. Drives the defaults. */

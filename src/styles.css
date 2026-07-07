@@ -369,6 +369,25 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   color: var(--text-dim);
   font-size: 14px;
 }
+.countdown__keys {
+  display: flex;
+  gap: 18px;
+  margin-top: 22px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.countdown__keys kbd {
+  display: inline-block;
+  padding: 1px 7px;
+  margin-right: 6px;
+  border: 1px solid var(--border, #33363d);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--text, #e6e6e6);
+}
 @keyframes pop {
   0% { transform: scale(1.4); opacity: 0; }
   60% { opacity: 1; }
@@ -859,13 +878,22 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   min-width: 0;
   overflow: hidden;
   background: #07080b;
+  /* Establish a size container so the preview can be sized in `cqh`/`cqw`
+     units below — this is what lets a PORTRAIT video fit (contain) instead of
+     being stretched to full width. */
+  container-type: size;
 }
 
 .preview-canvas {
   position: relative;
+  /* Fit inside the wrap preserving the video's aspect ratio, in BOTH
+     orientations. Width = the smaller of (full width) and (full height × aspect)
+     — the classic "contain" width — and the aspect-ratio derives the height.
+     `--vz-ar` (= sourceWidth / sourceHeight) is set inline by PreviewCanvas. */
+  aspect-ratio: var(--vz-ar, 1.7778);
+  width: min(100%, calc(100cqh * var(--vz-ar, 1.7778)));
   max-width: 100%;
   max-height: 100%;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1987,6 +2015,119 @@ body.cursor-grabbing * {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Timer chips: a distinct teal so they read apart from the yellow text chips. */
+.timer-chip {
+  background: linear-gradient(180deg, #5ee0d3, #3cc0b7);
+  color: #062622;
+}
+.timer-chip.text-chip--selected {
+  box-shadow: 0 2px 10px rgba(75, 220, 200, 0.5);
+}
+
+/* Timer properties: speed-keyframe editor + generic panel number input. */
+.panel__input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border, #33363d);
+  border-radius: 6px;
+  background: var(--surface-2, #16181d);
+  color: var(--text, #e6e6e6);
+  font-size: 13px;
+}
+.orient-btns {
+  display: flex;
+  gap: 6px;
+}
+.orient-btns .btn { flex: 1; justify-content: center; }
+.orient-btns .btn:last-child { flex: 0 0 auto; }
+.timer-kf__list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.timer-kf__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.timer-kf__time {
+  flex: 0 0 52px;
+  font-size: 12px;
+  color: var(--text-dim, #9aa0aa);
+  font-variant-numeric: tabular-nums;
+}
+.timer-kf__rate { flex: 1; }
+.timer-kf__x { color: var(--text-dim, #9aa0aa); font-size: 12px; }
+
+/* ===== Zoom tracking (pan) focus overlay ===== */
+.zoomfocus-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.zoomfocus-dot {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(108, 140, 255, 0.4);
+  border: 2px solid #6c8cff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+.zoomfocus-dot:active { cursor: grabbing; }
+.zoomfocus-dot--locked { opacity: 0.5; cursor: not-allowed; }
+.zoomfocus-dot--active {
+  border-color: #ffd54a;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 213, 74, 0.6);
+}
+.zoomfocus-dot--ghost {
+  background: rgba(94, 224, 211, 0.25);
+  border-style: dashed;
+  border-color: #5ee0d3;
+}
+.zoomfocus-dot__plus {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.zoomfocus-dot__n {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+/* Keyframe ticks under the track-mode time scrubber. */
+.track-scrub__ticks {
+  position: relative;
+  height: 14px;
+  margin-top: 2px;
+}
+.track-scrub__tick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #062622;
+  background: #5ee0d3;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 13px;
 }
 
 /* ===== Text overlay on the preview canvas ===== */

@@ -22,6 +22,8 @@ import {
 import { locateGlobal, clipEffectiveDurationMs } from '@shared/lib/clipTime';
 import { CropOverlay } from './CropOverlay';
 import { TextOverlay } from './TextOverlay';
+import { TimerOverlay } from './TimerOverlay';
+import { ZoomFocusOverlay } from './ZoomFocusOverlay';
 import { isExporting } from '../export/exportBridge';
 import type { Project } from '@shared/types/project';
 
@@ -70,8 +72,11 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
   // changes, so it never thrashes React state.
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
   const cropEditMode = useUiStore((s) => s.cropEditMode);
+  const trackEditMode = useUiStore((s) => s.trackEditMode);
   const paddingPct = useProjectStore((s) => s.project?.background.paddingPct ?? 0);
   const selectedTextId = useSelectionStore((s) => s.selectedTextId);
+  const selectedTimerId = useSelectionStore((s) => s.selectedTimerId);
+  const selectedZoomId = useSelectionStore((s) => s.selectedZoomId);
 
   // Build / rebuild PixiScene + video pool when the source URL (first clip)
   // or dimensions change. Subsequent clip additions/removals are handled by
@@ -101,6 +106,35 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
         const initialEl = setActiveClip(firstClip.id);
         if (!initialEl) return;
         setActiveClipId(firstClip.id);
+
+        // Self-heal the clip's stored dimensions from the DECODED video. The
+        // browser auto-applies rotation metadata, so videoWidth/videoHeight are
+        // always the TRUE display dims — this fixes imported portrait clips that
+        // were saved with landscape/rotated dimensions, with no ffmpeg probe or
+        // app restart. Updating the store changes the sourceWidth/sourceHeight
+        // props, which re-runs this effect and rebuilds the scene at the right
+        // aspect (autosave then persists the correction).
+        if (initialEl instanceof HTMLVideoElement) {
+          if (initialEl.readyState < 1 /* HAVE_METADATA */) {
+            await new Promise<void>((resolve) => {
+              const done = (): void => resolve();
+              initialEl.addEventListener('loadedmetadata', done, { once: true });
+              initialEl.addEventListener('error', done, { once: true });
+              setTimeout(done, 2000);
+            });
+          }
+          if (cancelled) return;
+          const vw = initialEl.videoWidth;
+          const vh = initialEl.videoHeight;
+          if (vw > 0 && vh > 0 && (vw !== sourceWidth || vh !== sourceHeight)) {
+            console.log(`[PreviewCanvas] reconciling clip dims ${sourceWidth}x${sourceHeight} -> ${vw}x${vh}`);
+            useProjectStore.getState().update((d) => {
+              const c = d.clips.find((x) => x.id === firstClip.id);
+              if (c) { c.sourceWidth = vw; c.sourceHeight = vh; }
+            }, { record: false });
+            return; // props changed → effect re-runs and builds at the right size
+          }
+        }
 
         const scene = await PixiScene.create(host, { w: sourceWidth, h: sourceHeight });
         if (cancelled) {
@@ -238,6 +272,7 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
             scene.setContentVisible(true);
             scene.setCrop(clip.crop ?? null);
             scene.setCropEditMode(useUiStore.getState().cropEditMode);
+            scene.setTrackEditMode(useUiStore.getState().trackEditMode);
 
             if (activeVideo) {
               // ── VIDEO clip: drive embedded audio + slave to the master clock ──
@@ -312,6 +347,12 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
             Math.round(masterMs),
             proj.timeline.textEvents ?? [],
             useSelectionStore.getState().selectedTextId,
+          );
+          // ── Timers (chronometers, same top layer) ──
+          scene.updateTimers(
+            Math.round(masterMs),
+            proj.timeline.timerEvents ?? [],
+            useSelectionStore.getState().selectedTimerId,
           );
 
           // ── Drive the timeline audio from the master clock, ALWAYS ──
@@ -415,6 +456,15 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
     usePlaybackStore.getState().setPlaying(false);
   }, [cropEditMode]);
 
+  // Same for track-edit: keep it paused so scrubbing to a moment and dropping
+  // a focus point is deliberate (the clip won't advance under the dot).
+  useEffect(() => {
+    if (!trackEditMode) return;
+    const v = getActiveVideo();
+    if (v && !v.paused) v.pause();
+    usePlaybackStore.getState().setPlaying(false);
+  }, [trackEditMode]);
+
   // Apply background changes without rebuilding the scene.
   useEffect(() => {
     if (!sceneRef.current || !background) return;
@@ -452,13 +502,17 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
     <div
       ref={containerRef}
       className="preview-canvas"
-      style={{ aspectRatio: `${sourceWidth} / ${sourceHeight}` }}
+      style={{ aspectRatio: `${sourceWidth} / ${sourceHeight}`, ['--vz-ar']: sourceWidth / sourceHeight } as React.CSSProperties}
     >
       {error && <div className="preview-canvas__error">{error}</div>}
       {cropEditMode && activeClipId && (
         <CropOverlay clipId={activeClipId} paddingPct={paddingPct} />
       )}
-      {!cropEditMode && selectedTextId && <TextOverlay />}
+      {!cropEditMode && !trackEditMode && selectedTextId && <TextOverlay />}
+      {!cropEditMode && !trackEditMode && selectedTimerId && <TimerOverlay />}
+      {trackEditMode && selectedZoomId && (
+        <ZoomFocusOverlay paddingPct={paddingPct} />
+      )}
     </div>
   );
 }

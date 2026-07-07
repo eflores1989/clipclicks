@@ -13,6 +13,9 @@ export const IPC = {
   WINDOW_ENTER_RECORDING: 'window:enter-recording',
   WINDOW_EXIT_RECORDING: 'window:exit-recording',
 
+  /** main → renderer: a global recording hotkey (F9 = pause/resume, F10 = stop). */
+  RECORDER_HOTKEY: 'recorder:hotkey',
+
   STAGING_REVEAL: 'staging:reveal',
 
   PROJECT_CREATE_FROM_STAGING: 'project:create-from-staging',
@@ -32,6 +35,10 @@ export const IPC = {
   PROJECT_EXTRACT_CLIP_AUDIO: 'project:extract-clip-audio',
   PROJECT_IMPORT_IMAGE: 'project:import-image',
   PROJECT_SAVE_IMAGE_ASSET: 'project:save-image-asset',
+  /** Import an external video as a NEW project (from the launcher). */
+  PROJECT_IMPORT_VIDEO: 'project:import-video',
+  /** Import an external video as a clip appended to the OPEN project (Media pool). */
+  PROJECT_IMPORT_VIDEO_APPEND: 'project:import-video-append',
 
   EXPORT_SAVE_DIALOG: 'export:save-dialog',
   EXPORT_RUN: 'export:run',

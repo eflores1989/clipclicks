@@ -5,7 +5,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { MediaPool } from './MediaPool';
 
 type Tab = 'project' | 'media';
-type MediaSubtab = 'video' | 'audio' | 'images' | 'text';
+type MediaSubtab = 'video' | 'audio' | 'images' | 'text' | 'timer';
 
 /**
  * Container for the right-side panel. Two top-level tabs:
@@ -51,6 +51,7 @@ export function RightPanel() {
               <SubtabButton id="video" current={mediaSubtab} onClick={setMediaSubtab} label="Video" />
               <SubtabButton id="audio" current={mediaSubtab} onClick={setMediaSubtab} label="Audio" />
               <SubtabButton id="text" current={mediaSubtab} onClick={setMediaSubtab} label="Text" />
+              <SubtabButton id="timer" current={mediaSubtab} onClick={setMediaSubtab} label="Timer" />
               <SubtabButton id="images" current={mediaSubtab} onClick={setMediaSubtab} label="Images" />
             </div>
             <MediaPool subtab={mediaSubtab} />

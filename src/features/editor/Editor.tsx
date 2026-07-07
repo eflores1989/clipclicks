@@ -13,6 +13,7 @@ import { Timeline } from './Timeline';
 import { ZoomProperties } from './ZoomProperties';
 import { AudioProperties } from './AudioProperties';
 import { TextProperties } from './TextProperties';
+import { TimerProperties } from './TimerProperties';
 import { TransitionProperties } from './TransitionProperties';
 import { RightPanel } from './RightPanel';
 import { ExportDialog } from '../export/ExportDialog';
@@ -41,6 +42,8 @@ export function Editor() {
   const selectAudio = useSelectionStore((s) => s.selectAudio);
   const selectedTextId = useSelectionStore((s) => s.selectedTextId);
   const selectText = useSelectionStore((s) => s.selectText);
+  const selectedTimerId = useSelectionStore((s) => s.selectedTimerId);
+  const selectTimer = useSelectionStore((s) => s.selectTimer);
   const selectedTransition = useSelectionStore((s) => s.selectedTransition);
   const selectTransition = useSelectionStore((s) => s.selectTransition);
 
@@ -50,12 +53,14 @@ export function Editor() {
 
   // Cleanup the video pool on unmount so nothing keeps streaming.
   useEffect(() => {
-    // Never enter the editor stuck in crop-edit mode (e.g. from a prior project).
+    // Never enter the editor stuck in crop-edit / track-edit mode.
     useUiStore.getState().setCropEditMode(false);
+    useUiStore.getState().setTrackEditMode(false);
     return () => {
       detachAllVideos();
       usePlaybackStore.getState().reset();
       useUiStore.getState().setCropEditMode(false);
+      useUiStore.getState().setTrackEditMode(false);
     };
   }, []);
 
@@ -94,6 +99,7 @@ export function Editor() {
         const selClipId = useSelectionStore.getState().selectedClipId;
         const selAudioId = useSelectionStore.getState().selectedAudioId;
         const selTextId = useSelectionStore.getState().selectedTextId;
+        const selTimerId = useSelectionStore.getState().selectedTimerId;
         const selTrans = useSelectionStore.getState().selectedTransition;
         if (selZoomId) {
           e.preventDefault();
@@ -109,6 +115,10 @@ export function Editor() {
           e.preventDefault();
           update((d) => { d.timeline.textEvents = d.timeline.textEvents.filter((t) => t.id !== selTextId); }, { label: 'Delete text' });
           selectText(null);
+        } else if (selTimerId) {
+          e.preventDefault();
+          update((d) => { if (d.timeline.timerEvents) d.timeline.timerEvents = d.timeline.timerEvents.filter((t) => t.id !== selTimerId); }, { label: 'Delete timer' });
+          selectTimer(null);
         } else if (selTrans) {
           e.preventDefault();
           update((d) => {
@@ -355,7 +365,7 @@ export function Editor() {
           </div>
           <Transport />
         </section>
-        {selectedZoomId ? <ZoomProperties /> : selectedAudioId ? <AudioProperties /> : selectedTextId ? <TextProperties /> : selectedTransition ? <TransitionProperties /> : <RightPanel />}
+        {selectedZoomId ? <ZoomProperties /> : selectedAudioId ? <AudioProperties /> : selectedTextId ? <TextProperties /> : selectedTimerId ? <TimerProperties /> : selectedTransition ? <TransitionProperties /> : <RightPanel />}
       </main>
 
       <Timeline />

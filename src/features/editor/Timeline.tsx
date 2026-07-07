@@ -4,6 +4,7 @@ import { useProjectStore } from '@/stores/project';
 import { useSelectionStore } from '@/stores/selection';
 import { ZoomTrack } from './ZoomTrack';
 import { TextTrack } from './TextTrack';
+import { TimerTrack } from './TimerTrack';
 import { ClipSegments } from './ClipSegments';
 import { AudioSegments } from './AudioSegments';
 import { getActiveVideo, setActiveClip, getVideoForClip } from './videoSession';
@@ -235,6 +236,10 @@ export function Timeline() {
             <div className="timeline__row timeline__row--text">
               <span className="timeline__row-label">Text</span>
               <TextTrack durationMs={viewDurationMs} />
+            </div>
+            <div className="timeline__row timeline__row--text">
+              <span className="timeline__row-label">Timer</span>
+              <TimerTrack durationMs={viewDurationMs} />
             </div>
             <div className="timeline__playhead" ref={playheadRef}>
               <div className="timeline__playhead-handle" />

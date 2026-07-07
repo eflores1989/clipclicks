@@ -84,6 +84,7 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
     const scene = await getExportScene(width, height);
     scene.applyBackground(project.background);
     scene.updateTexts(-1, [], null);
+    scene.updateTimers(-1, [], null);
 
     const ready: Promise<unknown>[] = [];
     for (const c of project.clips) {

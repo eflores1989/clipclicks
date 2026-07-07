@@ -26,6 +26,21 @@ export function RecordingBar() {
     return () => clearInterval(id);
   }, []);
 
+  // Global hotkeys (F9 pause/resume, F10 stop) fired from main. Read the live
+  // status from the store inside the handler so the toggle always sees the
+  // current value (the subscription is set up once).
+  useEffect(() => {
+    return window.videoZoom.recorder.onHotkey((action) => {
+      const s = useRecordingStore.getState().status;
+      if (action === 'stop') {
+        stop();
+      } else if (action === 'toggle-pause') {
+        if (s === 'paused') resume();
+        else if (s === 'recording') pause();
+      }
+    });
+  }, [pause, resume, stop]);
+
   let elapsedMs = 0;
   if (startedAt !== null) {
     const currentPaused = pausedAt !== null ? now - pausedAt : 0;

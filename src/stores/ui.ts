@@ -23,16 +23,25 @@ interface UiState {
    * overlay; click-zoom + cursor overlays are suspended.
    */
   cropEditMode: boolean;
+  /**
+   * True while the user is authoring a zoom's manual pan path. The preview
+   * shows the full uncropped frame (so points can be placed over the whole
+   * video) and a draggable focus dot drops/updates focus keyframes.
+   */
+  trackEditMode: boolean;
   setView: (view: AppView) => void;
   setPendingAppendTarget: (path: string | null) => void;
   setCropEditMode: (on: boolean) => void;
+  setTrackEditMode: (on: boolean) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
   view: 'launcher',
   pendingAppendToProjectPath: null,
   cropEditMode: false,
+  trackEditMode: false,
   setView: (view) => set({ view }),
   setPendingAppendTarget: (path) => set({ pendingAppendToProjectPath: path }),
-  setCropEditMode: (on) => set({ cropEditMode: on }),
+  setCropEditMode: (on) => set({ cropEditMode: on, ...(on ? { trackEditMode: false } : {}) }),
+  setTrackEditMode: (on) => set({ trackEditMode: on, ...(on ? { cropEditMode: false } : {}) }),
 }));

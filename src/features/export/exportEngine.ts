@@ -89,6 +89,7 @@ export async function renderTimelineToWebm(opts: ExportRenderOptions): Promise<U
     const scene = await getExportScene(width, height);
     scene.applyBackground(project.background);
     scene.updateTexts(-1, [], null); // clear any leftover text nodes from a prior export
+    scene.updateTimers(-1, [], null);
 
     // Create + preload one element per clip/track.
     const ready: Promise<unknown>[] = [];
@@ -248,6 +249,7 @@ export async function renderTimelineToWebm(opts: ExportRenderOptions): Promise<U
         }
 
         scene.updateTexts(Math.round(masterMs), project.timeline.textEvents ?? [], null);
+        scene.updateTimers(Math.round(masterMs), project.timeline.timerEvents ?? [], null);
 
         if (ctx) {
           for (const c of project.clips) {

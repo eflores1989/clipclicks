@@ -30,8 +30,10 @@ import {
   generateThumbnails,
   killActiveProcessingFfmpeg,
   probeDurationMs,
+  probeVideoMeta,
   transcodeAudioToM4a,
   transcodeToMp4Allkeyframes,
+  type ProbedVideoMeta,
 } from './ffmpeg';
 import { generateZooms } from '../../src/shared/lib/generateZooms';
 
@@ -144,6 +146,7 @@ function buildDefaultProject(opts: {
       durationMs: opts.clip.outMs - opts.clip.inMs,
       markers: [],
       textEvents: [],
+      timerEvents: [],
     },
     background: {
       presetId: 'sunset-gradient',
@@ -580,6 +583,11 @@ export async function loadProject(projectPath: string): Promise<ProjectLoadResul
     project.timeline.textEvents = [];
     mutated = true;
   }
+  // Timers: on-screen chronometers array on the timeline.
+  if (!Array.isArray((project.timeline as unknown as { timerEvents?: unknown }).timerEvents)) {
+    project.timeline.timerEvents = [];
+    mutated = true;
+  }
   // 5F.2: migrate CursorConfig to the new `style`-based schema. The old shape
   // had `visible` + `clickHighlight` (later we added `color`/`opacity`);
   // the new shape uses `style: 'hidden'|'pulse'|'dot'|'arrow'` + a single
@@ -648,7 +656,18 @@ export async function loadProject(projectPath: string): Promise<ProjectLoadResul
     if (clip.kind === 'image') continue;
     const absPath = join(projectPath, clip.filePath);
     if (!existsSync(absPath)) continue;
-    const probedMs = await probeDurationMs(absPath);
+    // One probe gives us both duration AND real (post-rotation, square-pixel)
+    // dimensions. The dims reconcile self-heals imported portrait clips that
+    // were saved with the source's landscape dims before the import fix.
+    const m = await probeVideoMeta(absPath);
+    const probedMs = m.durationMs || (await probeDurationMs(absPath)) || 0;
+    if (m.width > 0 && m.height > 0 && (m.width !== clip.sourceWidth || m.height !== clip.sourceHeight)) {
+      console.log(`[projectFs] reconciling clip ${clip.id.slice(0, 8)}: dims ${clip.sourceWidth}x${clip.sourceHeight} -> ${m.width}x${m.height}`);
+      clip.sourceWidth = m.width;
+      clip.sourceHeight = m.height;
+      if (m.fps > 0) clip.fps = m.fps;
+      mutated = true;
+    }
     if (!probedMs) continue;
     if (Math.abs(probedMs - clip.durationMs) < 50) continue;
     console.log(`[projectFs] reconciling clip ${clip.id.slice(0, 8)}: durationMs ${clip.durationMs} -> ${probedMs}`);
@@ -974,6 +993,177 @@ export async function saveImageAsset(
   await writeFile(join(projectPath, 'assets', fileName), Buffer.from(bytes));
   registerProjectRoot(projectPath);
   return { id, filePath: `assets/${fileName}`, name, width, height, kind, addedAt: Date.now() };
+}
+
+const VIDEO_EXTS = ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'];
+
+/** Show the "import video" file picker. Returns null if the user cancelled. */
+async function pickVideoFile(): Promise<string | null> {
+  const res = await dialog.showOpenDialog({
+    title: 'Importar video',
+    properties: ['openFile'],
+    filters: [{ name: 'Video', extensions: VIDEO_EXTS }],
+  });
+  if (res.canceled || res.filePaths.length === 0) return null;
+  return res.filePaths[0];
+}
+
+/**
+ * Build a Clip for an IMPORTED video. Imported clips have no recorded mouse
+ * events, so there is no auto-zoom (zoomEvents = []); the user can still add
+ * manual zooms in the editor. Everything else mirrors a recorded clip.
+ */
+function buildImportedClip(id: string, relPath: string, meta: ProbedVideoMeta, durationMs: number, sourceName: string): Clip {
+  return {
+    id,
+    filePath: relPath,
+    // probeVideoMeta returns 0 when it couldn't parse — fall back to 1080p.
+    sourceWidth: meta.width || 1920,
+    sourceHeight: meta.height || 1080,
+    fps: meta.fps || 30,
+    durationMs,
+    recordedAt: Date.now(),
+    capturedSource: { id: 'import', name: sourceName, kind: 'screen' },
+    displayBounds: undefined,
+    mouseEvents: [],
+    zoomEvents: [],
+    speedSegments: [],
+    inMs: 0,
+    outMs: durationMs,
+    timelineStartMs: 0,
+    // The imported file already contains whatever cursor it was recorded with;
+    // treating it as "system cursor captured" keeps the enhanced-cursor layer off.
+    systemCursorCaptured: true,
+    hasAudio: meta.hasAudio,
+    audioVolume: 1,
+    audioMuted: false,
+  };
+}
+
+/**
+ * Import an external video file as a brand-new project (launcher "Import video").
+ * Transcodes the source to an all-keyframes MP4 (so editor scrubbing is exact),
+ * generates thumbnails, and builds a single-clip project. Returns null if the
+ * user cancelled the file dialog. Reuses the same progress + cancel plumbing as
+ * createProjectFromStaging so the "Preparing your project" view works unchanged.
+ */
+export async function createProjectFromImport(): Promise<ProjectCreateResult | null> {
+  const src = await pickVideoFile();
+  if (!src) return null;
+  processingCancelled = false;
+  await mkdir(projectsRoot(), { recursive: true });
+
+  const name = basename(src).replace(/\.[^.]+$/, '').trim() || defaultProjectName();
+  const folder = sanitizeFolderName(name);
+  const projectPath = uniquifyPath(join(projectsRoot(), `${folder}.vzproj`));
+  console.log('[projectFs] createProjectFromImport:', src, '->', projectPath);
+
+  const cleanupAndBail = async (): Promise<never> => {
+    await rm(projectPath, { recursive: true, force: true }).catch(() => {});
+    throw new ProcessingCancelledError();
+  };
+
+  await mkdir(join(projectPath, 'assets'), { recursive: true });
+  await mkdir(join(projectPath, 'thumbnails'), { recursive: true });
+  await mkdir(join(projectPath, 'autosave'), { recursive: true });
+
+  const outputMp4 = join(projectPath, 'assets', 'recording.mp4');
+  const meta = await probeVideoMeta(src);
+
+  emitProgress('transcoding', 0);
+  try {
+    await transcodeToMp4Allkeyframes({
+      input: src,
+      output: outputMp4,
+      durationMs: meta.durationMs,
+      onProgress: (p) => emitProgress('transcoding', p),
+    });
+  } catch (err) {
+    if ((err as Error).message === 'CANCELLED' || processingCancelled) await cleanupAndBail();
+    await rm(projectPath, { recursive: true, force: true }).catch(() => {});
+    throw new Error(`Transcoding failed: ${(err as Error).message}`);
+  }
+  emitProgress('transcoding', 100);
+  if (processingCancelled) await cleanupAndBail();
+
+  emitProgress('thumbnails', 0);
+  try {
+    await generateThumbnails({
+      input: outputMp4,
+      outputDir: join(projectPath, 'thumbnails'),
+      intervalSec: 2,
+      width: 160,
+      durationMs: meta.durationMs,
+      onProgress: (p) => emitProgress('thumbnails', p),
+    });
+  } catch (err) {
+    if ((err as Error).message === 'CANCELLED' || processingCancelled) await cleanupAndBail();
+    console.warn('[projectFs] import thumbnails failed (non-fatal):', err);
+  }
+  emitProgress('thumbnails', 100);
+  if (processingCancelled) await cleanupAndBail();
+
+  emitProgress('finalizing', 0);
+  // Probe the OUTPUT (not the source): ffmpeg auto-rotates phone videos and
+  // normalizes non-square pixels, so the transcoded MP4's dimensions are the
+  // real playable ones. Using the source dims here would stretch a portrait
+  // clip into the landscape canvas.
+  const outMeta = await probeVideoMeta(outputMp4);
+  const effectiveDurationMs = outMeta.durationMs || (await probeDurationMs(outputMp4)) || meta.durationMs;
+
+  const clip = buildImportedClip(randomUUID(), 'assets/recording.mp4', outMeta, effectiveDurationMs, basename(src));
+  const project = buildDefaultProject({ name, clip });
+  await writeFile(join(projectPath, 'project.json'), JSON.stringify(project, null, 2));
+
+  registerProjectRoot(projectPath);
+  await touchRecent(projectPath);
+  emitProgress('done', 100);
+  return { projectPath, project, videoAssetPath: outputMp4 };
+}
+
+/**
+ * Import an external video file as a clip APPENDED to the open project (the
+ * Media > Video "Import" button). Same transcode-to-all-keyframes treatment as
+ * createProjectFromImport; the renderer pushes the returned clip onto the
+ * timeline. Returns null if the user cancelled the file dialog.
+ */
+export async function appendClipFromImport(targetProjectPath: string): Promise<ProjectAppendClipResult | null> {
+  const src = await pickVideoFile();
+  if (!src) return null;
+  if (!existsSync(targetProjectPath)) throw new Error(`Target project not found at ${targetProjectPath}`);
+  processingCancelled = false;
+
+  const newClipId = randomUUID();
+  const newFileName = `recording-${newClipId}.mp4`;
+  const outputMp4 = join(targetProjectPath, 'assets', newFileName);
+  await mkdir(join(targetProjectPath, 'assets'), { recursive: true });
+  console.log('[projectFs] appendClipFromImport:', src, '->', outputMp4);
+
+  const meta = await probeVideoMeta(src);
+  emitProgress('transcoding', 0);
+  try {
+    await transcodeToMp4Allkeyframes({
+      input: src,
+      output: outputMp4,
+      durationMs: meta.durationMs,
+      onProgress: (p) => emitProgress('transcoding', p),
+    });
+  } catch (err) {
+    await rm(outputMp4, { force: true }).catch(() => {});
+    if ((err as Error).message === 'CANCELLED' || processingCancelled) throw new ProcessingCancelledError();
+    throw new Error(`Transcoding failed: ${(err as Error).message}`);
+  }
+  emitProgress('transcoding', 100);
+
+  emitProgress('finalizing', 0);
+  // Probe the OUTPUT for the real (post-rotation, square-pixel) dimensions —
+  // see the matching note in createProjectFromImport.
+  const outMeta = await probeVideoMeta(outputMp4);
+  const effectiveDurationMs = outMeta.durationMs || (await probeDurationMs(outputMp4)) || meta.durationMs;
+
+  const clip = buildImportedClip(newClipId, `assets/${newFileName}`, outMeta, effectiveDurationMs, basename(src));
+  emitProgress('done', 100);
+  return { clip, videoAssetPath: outputMp4 };
 }
 
 /**

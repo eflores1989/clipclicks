@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, session, protocol, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, session, protocol, dialog, globalShortcut } from 'electron';
 import { createReadStream, existsSync } from 'node:fs';
 import { stat, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,8 +32,10 @@ import {
   stopRecording,
 } from './recorder';
 import {
+  appendClipFromImport,
   appendClipFromStaging,
   cancelProcessing,
+  createProjectFromImport,
   createProjectFromStaging,
   deleteAsset,
   deleteCustomBackground,
@@ -119,6 +121,34 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
+/**
+ * Register global (system-wide) recording hotkeys so the user can control the
+ * recording without clicking the on-screen bar — important in the native
+ * gdigrab (no-cursor, full-screen) capture path, where the bar can end up
+ * burned into the recording. Each press forwards an action to the renderer,
+ * which owns the recording session (see RecordingBar).
+ *   F9  → pause / resume (toggle)
+ *   F10 → stop
+ * We deliberately avoid grabbing Esc/common keys globally so we don't hijack
+ * shortcuts inside whatever app is being recorded.
+ */
+function registerRecordingHotkeys(): void {
+  const send = (action: 'toggle-pause' | 'stop'): void => {
+    mainWindow?.webContents.send(IPC.RECORDER_HOTKEY, action);
+  };
+  try {
+    globalShortcut.register('F9', () => send('toggle-pause'));
+    globalShortcut.register('F10', () => send('stop'));
+  } catch (err) {
+    console.warn('[main] could not register recording hotkeys:', err);
+  }
+}
+
+function unregisterRecordingHotkeys(): void {
+  globalShortcut.unregister('F9');
+  globalShortcut.unregister('F10');
+}
+
 function enterRecordingWindow(): void {
   if (!mainWindow) return;
   savedNormalBounds = mainWindow.getBounds();
@@ -130,10 +160,19 @@ function enterRecordingWindow(): void {
   mainWindow.setBounds({ ...RECORDING_BOUNDS, x, y });
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setSkipTaskbar(false);
+  // Exclude the recording bar from screen capture. On Windows this maps to
+  // SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE): the bar stays visible to
+  // the user (so its buttons still work) but no longer appears in the recorded
+  // video — for the default (Windows Graphics Capture) path and, on Win10 2004+,
+  // for the gdigrab BitBlt path too. Hotkeys cover the gap if a driver ignores it.
+  mainWindow.setContentProtection(true);
+  registerRecordingHotkeys();
 }
 
 function exitRecordingWindow(): void {
   if (!mainWindow) return;
+  unregisterRecordingHotkeys();
+  mainWindow.setContentProtection(false);
   mainWindow.setAlwaysOnTop(false);
   mainWindow.setMinimumSize(960, 600);
   mainWindow.setResizable(true);
@@ -329,6 +368,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.CUSTOM_BG_IMPORT, () => importCustomBackground());
   ipcMain.handle(IPC.CUSTOM_BG_DELETE, (_evt, id: string) => deleteCustomBackground(id));
   ipcMain.handle(IPC.PROJECT_IMPORT_IMAGE, async (_evt, projectPath: string) => importImage(projectPath));
+  ipcMain.handle(IPC.PROJECT_IMPORT_VIDEO, async () => createProjectFromImport());
+  ipcMain.handle(IPC.PROJECT_IMPORT_VIDEO_APPEND, async (_evt, targetProjectPath: string) =>
+    appendClipFromImport(targetProjectPath),
+  );
   ipcMain.handle(
     IPC.PROJECT_SAVE_IMAGE_ASSET,
     async (_evt, args: { projectPath: string; bytes: Uint8Array; kind: 'imported' | 'solid' | 'gradient'; name: string; width: number; height: number }) =>
@@ -409,4 +452,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   disposeRecorder();
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
