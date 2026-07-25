@@ -200,6 +200,10 @@ const MIME_BY_EXT: Record<string, string> = {
  *  can be cached aggressively — see the note in the range handler below. */
 const CACHE_IMMUTABLE = 'public, max-age=31536000, immutable';
 
+/** Largest slice served for a single range request. See the note in the range
+ *  handler: this is what keeps a seek from spawning a read over the whole file. */
+const RANGE_CHUNK_BYTES = 4 * 1024 * 1024;
+
 function nodeStreamToWeb(stream: NodeJS.ReadableStream): ReadableStream<Uint8Array> {
   return Readable.toWeb(stream as Readable) as unknown as ReadableStream<Uint8Array>;
 }
@@ -238,18 +242,37 @@ function registerVzAssetProtocol(): void {
     const contentType = MIME_BY_EXT[extname(absPath).toLowerCase()] ?? 'application/octet-stream';
     const rangeHeader = request.headers.get('range') ?? request.headers.get('Range');
 
+    // Validators let Chromium actually store the (immutable) responses.
+    const etag = `"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`;
+    const lastModified = stats.mtime.toUTCString();
+
     if (rangeHeader) {
       const m = rangeHeader.match(/bytes=(\d*)-(\d*)/);
       if (!m) return new Response('Bad range', { status: 416 });
       const start = m[1] ? parseInt(m[1], 10) : 0;
-      const end = m[2] ? parseInt(m[2], 10) : total - 1;
+      let end = m[2] ? parseInt(m[2], 10) : total - 1;
       if (start >= total || end >= total || start > end) {
         return new Response('Range not satisfiable', {
           status: 416,
           headers: { 'Content-Range': `bytes */${total}` },
         });
       }
+      // CAP the served range. Chromium's media stack asks for an OPEN-ENDED
+      // `bytes=X-` on every seek; answering "X → EOF" opened a read stream over
+      // the whole remainder of the file (hundreds of MB for our all-keyframes
+      // assets) which it then abandons after a few hundred KB. The frame-by-frame
+      // export seeks once per output frame, so that was thousands of abandoned
+      // multi-hundred-MB reads — measured at ~700ms per seek, i.e. 99% of the
+      // export time. Returning fewer bytes than requested is valid HTTP: the
+      // client just asks for the next range.
+      if (end - start + 1 > RANGE_CHUNK_BYTES) {
+        end = Math.min(total - 1, start + RANGE_CHUNK_BYTES - 1);
+      }
       const chunk = createReadStream(absPath, { start, end });
+      // If the client walks away (every seek does), stop reading immediately.
+      request.signal?.addEventListener('abort', () => {
+        try { chunk.destroy(); } catch { /* ignore */ }
+      }, { once: true });
       return new Response(nodeStreamToWeb(chunk), {
         status: 206,
         headers: {
@@ -257,6 +280,8 @@ function registerVzAssetProtocol(): void {
           'Content-Length': String(end - start + 1),
           'Content-Range': `bytes ${start}-${end}/${total}`,
           'Accept-Ranges': 'bytes',
+          ETag: etag,
+          'Last-Modified': lastModified,
           // Assets are IMMUTABLE (each clip/audio/image gets a unique filename, and a
           // project's recording.mp4 is written once), so let Chromium cache the
           // ranges. This matters a lot for the frame-by-frame export: it seeks
@@ -269,12 +294,17 @@ function registerVzAssetProtocol(): void {
     }
 
     const full = createReadStream(absPath);
+    request.signal?.addEventListener('abort', () => {
+      try { full.destroy(); } catch { /* ignore */ }
+    }, { once: true });
     return new Response(nodeStreamToWeb(full), {
       status: 200,
       headers: {
         'Content-Type': contentType,
         'Content-Length': String(total),
         'Accept-Ranges': 'bytes',
+        ETag: etag,
+        'Last-Modified': lastModified,
         'Cache-Control': CACHE_IMMUTABLE,
       },
     });

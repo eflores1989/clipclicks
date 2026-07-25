@@ -1,6 +1,6 @@
 # Clipclicks Studio — Funcionalidades
 
-Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.2** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, GIFs animados, sombra nítida en el render, tiempo estimado de export). Sirve de checklist para verificar cada feature.
+Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.3** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, GIFs animados, sombra nítida en el render, tiempo estimado de export). Sirve de checklist para verificar cada feature.
 
 > Convenciones: **negrita** = botón / atajo / nombre de UI. `código` = ruta, archivo o valor literal. Las secciones marcadas **🚧 pendiente** son features ya planificadas pero todavía no implementadas; vienen en sub-fases siguientes.
 
@@ -435,12 +435,14 @@ Inter, Segoe UI, Arial, Georgia (serif), **Consolas**, **Cascadia Code**, **Bahn
 
 Imágenes en el **mismo canal de video**, comportándose como clips. Una imagen es un `Clip` con `kind: 'image'`: tiene `filePath` a un PNG/JPG, sin audio, sin mouse events, con una **duración por defecto de 3s** que se puede alargar/acortar. Reusa TODA la maquinaria de clips (trim, reordenar, split, delete, undo).
 
+> **Fix v0.2.3 — "el clip se ve negro al agregarlo, y bien al reabrir el proyecto"**: cuando un clip de VIDEO se agrega con el editor abierto (GIF convertido, import de video), su `<video>` se crea recién ahí. El swap de textura solo espera `loadedmetadata` (a diferencia de las imágenes, donde sí se espera el decode), y si el playhead cae justo al inicio del clip la deriva es ~0, así que **ningún seek dispara un decode** → la textura quedaba negra hasta reconstruir la escena (salir y volver a entrar). Ahora, mientras `readyState < 2`, el tick empuja un micro-seek (throttled) y **mantiene abierta la ventana de warm-up** hasta que el frame existe de verdad.
+
 ### Por qué no desestabiliza al reproductor
 El reloj master reconcilia clip activo + textura cada frame desde `locateGlobal(masterMs)`. Los helpers específicos de video (`getActiveVideo`, `getVideoForClip`, `applyEffectivePlaybackRate`) devuelven **null** para clips de imagen, y todos los llamadores tienen guarda `if (v)` → para una imagen son no-op. El `videoSession` crea un `<img>` (no un `<video>`) para esos clips; el tick los muestra como textura estática (sin play/seek/drift) y avanza el master igual. Resultado: 1, 2, N imágenes intercaladas no tocan el camino de video.
 
 ### Pestaña "Imágenes" (Media)
 - **Importar**: file dialog (png/jpg/webp/gif/bmp), copia a `assets/image-{id}.ext`; las dimensiones reales las resuelve el renderer cargando el asset.
-- **GIFs animados (✅ v0.2.2)**: un `.gif` se **transcodifica a MP4** al importarlo (`assets/image-{id}.mp4`, all-keyframes, 25fps CFR, dimensiones forzadas a par) y al soltarlo en el timeline crea un clip `kind:'video'` con su duración real. Por eso **anima en el canvas y en los dos métodos de export**. Antes quedaba fijo en el primer frame: un `<img>` sube su textura WebGL una sola vez, y su animación DOM corre en wall-clock (lo que además haría no-determinista el export cuadro por cuadro). La card del pool muestra el GIF con un `<video>` en loop y la etiqueta `GIF <duración>`. Si la conversión falla, cae al comportamiento anterior (imagen fija).
+- **GIFs animados (✅ v0.2.2)**: un `.gif` se **transcodifica a MP4** al importarlo (fix v0.2.3: ver la nota de "clip negro al agregarlo" más abajo) (`assets/image-{id}.mp4`, all-keyframes, 25fps CFR, dimensiones forzadas a par) y al soltarlo en el timeline crea un clip `kind:'video'` con su duración real. Por eso **anima en el canvas y en los dos métodos de export**. Antes quedaba fijo en el primer frame: un `<img>` sube su textura WebGL una sola vez, y su animación DOM corre en wall-clock (lo que además haría no-determinista el export cuadro por cuadro). La card del pool muestra el GIF con un `<video>` en loop y la etiqueta `GIF <duración>`. Si la conversión falla, cae al comportamiento anterior (imagen fija).
 - **Sólido**: color picker + "Agregar sólido" → pinta un PNG del tamaño del proyecto (Canvas 2D → `saveImageAsset`).
 - **Degradados**: 6 presets (Sunset/Ocean/Purple/Mint/Charcoal/Night) que generan un PNG con `linear-gradient`.
 - Cada item es una card con thumbnail; **+** lo agrega al final del canal de video (clip de 3s); 🗑 lo borra del pool (el archivo solo se borra si ningún clip lo usa).
@@ -557,8 +559,10 @@ Todo lo que ves en el preview sale en el MP4, en **los dos métodos**: zooms (in
 ### Velocidad del export cuadro por cuadro
 Es **inherentemente más lento que realtime** porque por cada frame de salida hace: seek exacto del video fuente → render de la escena → `VideoFrame` → encode. El costo dominante medido es el **seek**: los assets del proyecto son *all-keyframes* (`-g 1`, ideal para scrubbing) y por eso pesados (~15 Mbps, 539 MB para 4:46), así que cada seek re-lee del disco.
 
-Mejoras aplicadas en v0.2.2 (**ninguna toca la calidad de salida**):
-- Los rangos de `vzasset://` ahora se sirven **cacheables** (`immutable`): los assets nunca cambian (nombres únicos por asset), y antes iban con `no-cache`, así que cada uno de los miles de seeks volvía a pegarle al handler y al disco.
+**El cuello real (medido y corregido en v0.2.3)**: el handler de `vzasset://` respondía los `Range: bytes=X-` **abiertos** con "desde X hasta el final del archivo". Chromium pide exactamente eso en **cada seek**, así que cada seek abría un stream sobre cientos de MB que abandonaba a los pocos KB. Con miles de seeks por export, los streams abandonados se acumulaban y saturaban el disco: el perfilado mostró `seek=466ms` al 25% **subiendo a 618ms** al 50% (el resto de las fases sumaba ~2ms), además de errores y pantallazos negros del driver de video. Ahora cada range se **capea a 4MB** (devolver menos bytes de los pedidos es HTTP válido; el cliente pide el siguiente tramo) y el stream se **destruye** si el cliente abandona la request.
+
+Otras mejoras (**ninguna toca la calidad de salida**):
+- Los rangos de `vzasset://` se sirven **cacheables** (`immutable` + `ETag`/`Last-Modified`, que son los validadores que Chromium necesita para poder guardarlos).
 - **Se saltea el seek** cuando el frame de salida cae dentro del *mismo frame fuente* (tolerancia = medio frame): re-seekear ahí decodifica la misma imagen. Ayuda cuando el fps de salida es mayor al de la fuente o el clip está ralentizado.
 - **Cola del encoder más profunda** (8 → 24): el encoder trabaja sobre frames ya compuestos mientras el loop hace el seek/render del siguiente, en vez de frenar en cada frame.
 - **Perfilado por fase** en la consola (cada 25% + resumen final): `seek / compose / render / encode / queueWait` en ms por frame. Sirve para ver dónde se va el tiempo en un caso real.

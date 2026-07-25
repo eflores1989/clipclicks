@@ -624,7 +624,9 @@ export class PixiScene {
           blur: blurPx,
           // Passes can't be changed after construction, and the flag is fixed
           // per scene, so this is decided once here.
-          quality: this.highQuality ? 6 : 2,
+          // 4 passes is visibly smooth without piling GPU work onto every export
+          // frame (8+ passes at 4K is enough to stall the display driver).
+          quality: this.highQuality ? 4 : 2,
           color: 0x000000,
         });
         this.videoContainer.filters = [this.dropShadow];
