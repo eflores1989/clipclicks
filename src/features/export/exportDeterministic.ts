@@ -15,6 +15,15 @@ export interface DeterministicExportOptions {
   resolveUrl: (absPath: string) => Promise<string>;
   onProgress: (percent: number) => void; // 0..100 of the encode phase
   shouldCancel: () => boolean;
+  /**
+   * Ask for the GPU's H.264 encoder. OFF by default so the output is bit-for-bit
+   * what the software encoder produces. Turning it on is dramatically faster —
+   * the software encoder is the bottleneck of this path (~120ms/frame at 1080p60,
+   * vs ~30ms for everything else combined) — at the cost of the encoder being a
+   * different implementation (visually indistinguishable at these bitrates, but
+   * not identical). Falls back to software if the GPU can't do the config.
+   */
+  preferHardware?: boolean;
 }
 
 const ENCODER_AVAILABLE = typeof (globalThis as { VideoEncoder?: unknown }).VideoEncoder !== 'undefined';
@@ -71,14 +80,24 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
 
   // AVCC output (default) so mp4-muxer gets the avcC description in the chunk meta.
   const candidates = ['avc1.640034', 'avc1.640033', 'avc1.640028', 'avc1.4D4028', 'avc1.42E01E'];
+  // With `preferHardware` we probe the GPU encoder first and fall back to the
+  // default (software-or-whatever-Chromium-picks) if nothing matches.
+  const accelModes: Array<'prefer-hardware' | 'no-preference'> =
+    opts.preferHardware ? ['prefer-hardware', 'no-preference'] : ['no-preference'];
   let codec: string | null = null;
-  for (const c of candidates) {
-    try {
-      const support = await VideoEncoder.isConfigSupported({ codec: c, width, height, bitrate: videoBitrate, framerate: fps });
-      if (support.supported) { codec = c; break; }
-    } catch { /* try next */ }
+  let accel: 'prefer-hardware' | 'no-preference' = 'no-preference';
+  outer: for (const mode of accelModes) {
+    for (const c of candidates) {
+      try {
+        const support = await VideoEncoder.isConfigSupported({
+          codec: c, width, height, bitrate: videoBitrate, framerate: fps, hardwareAcceleration: mode,
+        });
+        if (support.supported) { codec = c; accel = mode; break outer; }
+      } catch { /* try next */ }
+    }
   }
   if (!codec) throw new Error('This system does not support encoding H.264 via WebCodecs.');
+  console.log(`[export] encoder: ${codec} (${accel})`);
 
   const abs = (rel: string): string => `${projectPath}/${rel}`.replace(/\\/g, '/');
   const videoEls = new Map<string, HTMLVideoElement>();
@@ -126,7 +145,7 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
       output: (chunk, meta) => { try { muxer.addVideoChunk(chunk, meta); } catch (e) { encodeError = e as Error; } },
       error: (e) => { encodeError = e as unknown as Error; },
     });
-    encoder.configure({ codec, width, height, bitrate: videoBitrate, framerate: fps, latencyMode: 'quality' });
+    encoder.configure({ codec, width, height, bitrate: videoBitrate, framerate: fps, latencyMode: 'quality', hardwareAcceleration: accel });
 
     const videoEnd = project.timeline.durationMs;
     const frameDurUs = 1_000_000 / fps;

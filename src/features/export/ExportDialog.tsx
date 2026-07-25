@@ -118,6 +118,9 @@ export function ExportDialog() {
   const [vQuality, setVQuality] = useState('medium');
   const [aQuality, setAQuality] = useState('medium');
   const [includeAudio, setIncludeAudio] = useState(true);
+  // Opt-in: the frame-by-frame path is encoder-bound, but the GPU encoder is a
+  // different implementation, so the default stays on software (zero change).
+  const [preferHardware, setPreferHardware] = useState(false);
   const cancelRef = useRef(false);
 
   const busy = status === 'rendering' || status === 'transcoding';
@@ -170,7 +173,7 @@ export function ExportDialog() {
       try {
         const mp4Bytes = await encodeTimelineToMp4({
           project, projectPath, width: w, height: h, fps, videoBitrate, totalMs: durationMs,
-          resolveUrl,
+          resolveUrl, preferHardware,
           onProgress: (pct) => exportStore.getState().setStage('rendering', pct),
           shouldCancel: () => cancelRef.current,
         });
@@ -204,7 +207,7 @@ export function ExportDialog() {
       } finally { unsub(); }
       exportStore.getState().finishOk(outPath);
     } catch (err) { onErr(err); }
-  }, [method, resolution, fps, vQuality, aQuality, includeAudio, exportStore]);
+  }, [method, resolution, fps, vQuality, aQuality, includeAudio, preferHardware, exportStore]);
 
   if (!open) return null;
 
@@ -255,6 +258,16 @@ export function ExportDialog() {
                 <input type="checkbox" checked={includeAudio} onChange={(e) => setIncludeAudio(e.target.checked)} />
                 Include audio (clips + audio tracks)
               </label>
+              {method === 'deterministic' && (
+                <label className="panel__checkbox">
+                  <input type="checkbox" checked={preferHardware} onChange={(e) => setPreferHardware(e.target.checked)} />
+                  Use the GPU encoder (much faster)
+                  <span className="picker__option-hint">
+                    The software encoder is what makes this method slow (~120 ms per frame at 1080p60 — everything else adds up to ~30 ms).
+                    The GPU one is a different implementation: at these bitrates it looks the same, but it isn't bit-for-bit identical. Off = exactly the quality you get today.
+                  </span>
+                </label>
+              )}
               <p className="panel__hint">
                 {method === 'realtime'
                   ? 'Fast: realtime capture (takes about as long as the video). Ideal for 1080p. Keep this window in focus while exporting.'

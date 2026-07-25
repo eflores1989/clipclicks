@@ -1,6 +1,6 @@
 # Clipclicks Studio — Funcionalidades
 
-Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.3** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, GIFs animados, sombra nítida en el render, tiempo estimado de export). Sirve de checklist para verificar cada feature.
+Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.4** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, GIFs animados, sombra nítida en el render, tiempo estimado de export). Sirve de checklist para verificar cada feature.
 
 > Convenciones: **negrita** = botón / atajo / nombre de UI. `código` = ruta, archivo o valor literal. Las secciones marcadas **🚧 pendiente** son features ya planificadas pero todavía no implementadas; vienen en sub-fases siguientes.
 
@@ -559,7 +559,21 @@ Todo lo que ves en el preview sale en el MP4, en **los dos métodos**: zooms (in
 ### Velocidad del export cuadro por cuadro
 Es **inherentemente más lento que realtime** porque por cada frame de salida hace: seek exacto del video fuente → render de la escena → `VideoFrame` → encode. El costo dominante medido es el **seek**: los assets del proyecto son *all-keyframes* (`-g 1`, ideal para scrubbing) y por eso pesados (~15 Mbps, 539 MB para 4:46), así que cada seek re-lee del disco.
 
-**El cuello real (medido y corregido en v0.2.3)**: el handler de `vzasset://` respondía los `Range: bytes=X-` **abiertos** con "desde X hasta el final del archivo". Chromium pide exactamente eso en **cada seek**, así que cada seek abría un stream sobre cientos de MB que abandonaba a los pocos KB. Con miles de seeks por export, los streams abandonados se acumulaban y saturaban el disco: el perfilado mostró `seek=466ms` al 25% **subiendo a 618ms** al 50% (el resto de las fases sumaba ~2ms), además de errores y pantallazos negros del driver de video. Ahora cada range se **capea a 4MB** (devolver menos bytes de los pedidos es HTTP válido; el cliente pide el siguiente tramo) y el stream se **destruye** si el cliente abandona la request.
+**El cuello real (medido y corregido en v0.2.3/v0.2.4)**: el handler de `vzasset://` respondía los `Range: bytes=X-` **abiertos** con "desde X hasta el final del archivo". Chromium pide exactamente eso en **cada seek**, así que cada seek abría un stream sobre cientos de MB que abandonaba a los pocos KB. Con miles de seeks por export, los streams abandonados se acumulaban y saturaban el disco: el perfilado mostró `seek=466ms` al 25% **subiendo a 618ms** al 50%, además de errores y pantallazos negros del driver de video. Ahora cada range se **capea** (devolver menos bytes de los pedidos es HTTP válido; el cliente pide el siguiente tramo) y el stream se **destruye** si el cliente abandona la request.
+
+El tamaño del cap importa muchísimo, medido sobre el mismo export (41s, 1080p60, 2510 frames):
+
+| cap por request | seek por frame | total de seeks |
+|---|---|---|
+| sin cap (→EOF) | 466 → 618 ms (empeorando) | — |
+| 4 MB | 253 ms (estable) | 634 s |
+| **512 KB** | **29.7 ms** | **74 s** |
+
+El disco nunca fue el problema (una lectura aleatoria de 4MB sobre el asset real tarda 8ms en SSD): lo que costaba era **la cantidad de bytes que cruzaban el protocolo por seek**. Con 512KB (un frame pesa 50-80KB) el export hace menos de una request cada cinco frames: casi todo se sirve del buffer de Chromium.
+
+**Cuello actual: el encoder.** Con el seek resuelto, el tiempo se fue a `queueWait` (la espera por la cola del `VideoEncoder`): ~121 ms por frame = 303 s de los ~390 s del export. Es el encoder de **software** de WebCodecs. Por eso hay un checkbox opcional **"Use the GPU encoder (much faster)"** en el diálogo (solo para el método cuadro por cuadro):
+- **Apagado (default)**: exactamente la calidad de hoy, bit a bit.
+- **Encendido**: usa el encoder de la GPU (`hardwareAcceleration: 'prefer-hardware'`, con fallback a software si no lo soporta). Mucho más rápido; a estos bitrates se ve igual, pero es otra implementación, así que no es idéntico bit a bit. La consola loguea cuál se usó: `[export] encoder: avc1.… (prefer-hardware|no-preference)`.
 
 Otras mejoras (**ninguna toca la calidad de salida**):
 - Los rangos de `vzasset://` se sirven **cacheables** (`immutable` + `ETag`/`Last-Modified`, que son los validadores que Chromium necesita para poder guardarlos).

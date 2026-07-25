@@ -200,9 +200,35 @@ const MIME_BY_EXT: Record<string, string> = {
  *  can be cached aggressively — see the note in the range handler below. */
 const CACHE_IMMUTABLE = 'public, max-age=31536000, immutable';
 
-/** Largest slice served for a single range request. See the note in the range
- *  handler: this is what keeps a seek from spawning a read over the whole file. */
-const RANGE_CHUNK_BYTES = 4 * 1024 * 1024;
+/**
+ * Largest slice served for a single range request. See the note in the range
+ * handler: this is what keeps a seek from spawning a read over the whole file.
+ *
+ * Sized from measurements: the disk itself is not the constraint (a 4MB random
+ * read off the SSD is ~8ms), but the per-seek cost tracked the number of bytes
+ * we streamed per request — unbounded (→EOF) averaged 466-618ms per seek and got
+ * worse over time, a 4MB cap brought it to a stable ~240ms. A frame is only
+ * ~50-80KB, so 512KB still covers a seek plus read-ahead while cutting the
+ * per-request payload 8×.
+ */
+const RANGE_CHUNK_BYTES = 512 * 1024;
+
+/**
+ * Rolling stats for the asset protocol, so an export's cost can be attributed
+ * (requests per frame × ms per request) instead of guessed at. Logged every 500
+ * requests; `bytes` counts what we actually streamed out.
+ */
+const assetStats = { requests: 0, bytes: 0, ms: 0 };
+
+function noteAssetRequest(bytes: number, ms: number): void {
+  assetStats.requests++;
+  assetStats.bytes += bytes;
+  assetStats.ms += ms;
+  if (assetStats.requests % 500 === 0) {
+    const { requests, bytes: b, ms: m } = assetStats;
+    console.log(`[vzasset] ${requests} requests | avg ${(b / requests / 1024).toFixed(0)} KB in ${(m / requests).toFixed(1)} ms | total ${(b / 1048576).toFixed(0)} MB`);
+  }
+}
 
 function nodeStreamToWeb(stream: NodeJS.ReadableStream): ReadableStream<Uint8Array> {
   return Readable.toWeb(stream as Readable) as unknown as ReadableStream<Uint8Array>;
@@ -273,6 +299,10 @@ function registerVzAssetProtocol(): void {
       request.signal?.addEventListener('abort', () => {
         try { chunk.destroy(); } catch { /* ignore */ }
       }, { once: true });
+      const t0 = performance.now();
+      let sent = 0;
+      chunk.on('data', (d: string | Buffer) => { sent += typeof d === 'string' ? d.length : d.length; });
+      chunk.on('close', () => noteAssetRequest(sent, performance.now() - t0));
       return new Response(nodeStreamToWeb(chunk), {
         status: 206,
         headers: {
