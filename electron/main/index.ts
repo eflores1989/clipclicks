@@ -196,22 +196,38 @@ const MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
 };
 
-/** Project assets never change once written (unique per-asset filenames), so they
- *  can be cached aggressively — see the note in the range handler below. */
-const CACHE_IMMUTABLE = 'public, max-age=31536000, immutable';
+/**
+ * Assets are served UNCACHED on purpose.
+ *
+ * v0.2.3 made them `public, max-age=31536000, immutable` (+ ETag) on the theory
+ * that caching would speed up the frame-by-frame export's per-frame seeks. It
+ * didn't — the win came entirely from capping the range size (see
+ * RANGE_CHUNK_BYTES) — and combining a long-lived cache with responses that
+ * deliberately return FEWER bytes than requested is risky: Chromium caches
+ * partial (206) responses, and if it ever maps a cached slice to the wrong offset
+ * the decoder is fed bytes from the wrong part of the file. That shows up as a
+ * video that keeps playing but never displays what actually happened on screen.
+ * Not worth any speed: correctness first. This is the exact header the app used
+ * before v0.2.3, i.e. the behaviour that was proven fine for playback.
+ */
+const CACHE_NO_STORE = 'no-cache';
 
 /**
- * Largest slice served for a single range request. See the note in the range
- * handler: this is what keeps a seek from spawning a read over the whole file.
+ * NOTE — ranges are served in full, on purpose.
  *
- * Sized from measurements: the disk itself is not the constraint (a 4MB random
- * read off the SSD is ~8ms), but the per-seek cost tracked the number of bytes
- * we streamed per request — unbounded (→EOF) averaged 466-618ms per seek and got
- * worse over time, a 4MB cap brought it to a stable ~240ms. A frame is only
- * ~50-80KB, so 512KB still covers a seek plus read-ahead while cutting the
- * per-request payload 8×.
+ * v0.2.2-v0.2.4 capped them (512KB) because the frame-by-frame export seeks once
+ * per output frame and the per-seek cost tracked the bytes crossing the protocol:
+ * unbounded averaged 466-618ms, 4MB ~253ms, 512KB ~29.7ms. But capping starves
+ * consumers that STREAM: the editor's preview began skipping frames, so a short
+ * lived thing (a dropdown opening) never showed up even though the clip looked
+ * like it was advancing, and exports of longer projects came out the same way.
+ * A faster export is not worth video that doesn't show what was recorded, so the
+ * cap is gone. What stays is destroying the stream when the client walks away,
+ * which is what kept the abandoned reads piling up.
+ *
+ * If this is revisited: the fix must be verified on a LONG project by diffing the
+ * exported frames against the source, not by timing alone.
  */
-const RANGE_CHUNK_BYTES = 512 * 1024;
 
 /**
  * Rolling stats for the asset protocol, so an export's cost can be attributed
@@ -268,41 +284,24 @@ function registerVzAssetProtocol(): void {
     const contentType = MIME_BY_EXT[extname(absPath).toLowerCase()] ?? 'application/octet-stream';
     const rangeHeader = request.headers.get('range') ?? request.headers.get('Range');
 
-    // Validators let Chromium actually store the (immutable) responses.
-    const etag = `"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`;
-    const lastModified = stats.mtime.toUTCString();
-
     if (rangeHeader) {
       const m = rangeHeader.match(/bytes=(\d*)-(\d*)/);
       if (!m) return new Response('Bad range', { status: 416 });
       const start = m[1] ? parseInt(m[1], 10) : 0;
-      let end = m[2] ? parseInt(m[2], 10) : total - 1;
+      const end = m[2] ? parseInt(m[2], 10) : total - 1;
       if (start >= total || end >= total || start > end) {
         return new Response('Range not satisfiable', {
           status: 416,
           headers: { 'Content-Range': `bytes */${total}` },
         });
       }
-      // CAP the served range. Chromium's media stack asks for an OPEN-ENDED
-      // `bytes=X-` on every seek; answering "X → EOF" opened a read stream over
-      // the whole remainder of the file (hundreds of MB for our all-keyframes
-      // assets) which it then abandons after a few hundred KB. The frame-by-frame
-      // export seeks once per output frame, so that was thousands of abandoned
-      // multi-hundred-MB reads — measured at ~700ms per seek, i.e. 99% of the
-      // export time. Returning fewer bytes than requested is valid HTTP: the
-      // client just asks for the next range.
-      if (end - start + 1 > RANGE_CHUNK_BYTES) {
-        end = Math.min(total - 1, start + RANGE_CHUNK_BYTES - 1);
-      }
       const chunk = createReadStream(absPath, { start, end });
-      // If the client walks away (every seek does), stop reading immediately.
-      request.signal?.addEventListener('abort', () => {
-        try { chunk.destroy(); } catch { /* ignore */ }
-      }, { once: true });
+      // Read-only accounting. Note the bytes come from `bytesRead` on 'close' — a
+      // 'data' listener here would switch the readable to flowing mode while
+      // `Readable.toWeb()` is consuming it, and nothing may interfere with how
+      // this response is delivered.
       const t0 = performance.now();
-      let sent = 0;
-      chunk.on('data', (d: string | Buffer) => { sent += typeof d === 'string' ? d.length : d.length; });
-      chunk.on('close', () => noteAssetRequest(sent, performance.now() - t0));
+      chunk.on('close', () => noteAssetRequest(chunk.bytesRead, performance.now() - t0));
       return new Response(nodeStreamToWeb(chunk), {
         status: 206,
         headers: {
@@ -310,32 +309,19 @@ function registerVzAssetProtocol(): void {
           'Content-Length': String(end - start + 1),
           'Content-Range': `bytes ${start}-${end}/${total}`,
           'Accept-Ranges': 'bytes',
-          ETag: etag,
-          'Last-Modified': lastModified,
-          // Assets are IMMUTABLE (each clip/audio/image gets a unique filename, and a
-          // project's recording.mp4 is written once), so let Chromium cache the
-          // ranges. This matters a lot for the frame-by-frame export: it seeks
-          // once per output frame over an all-keyframes file (~15 Mbps, hundreds
-          // of MB), and with `no-cache` every one of those seeks round-tripped
-          // back into this handler to re-read from disk.
-          'Cache-Control': CACHE_IMMUTABLE,
+          'Cache-Control': CACHE_NO_STORE,
         },
       });
     }
 
     const full = createReadStream(absPath);
-    request.signal?.addEventListener('abort', () => {
-      try { full.destroy(); } catch { /* ignore */ }
-    }, { once: true });
     return new Response(nodeStreamToWeb(full), {
       status: 200,
       headers: {
         'Content-Type': contentType,
         'Content-Length': String(total),
         'Accept-Ranges': 'bytes',
-        ETag: etag,
-        'Last-Modified': lastModified,
-        'Cache-Control': CACHE_IMMUTABLE,
+        'Cache-Control': CACHE_NO_STORE,
       },
     });
   });

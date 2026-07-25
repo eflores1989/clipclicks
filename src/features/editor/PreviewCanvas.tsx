@@ -195,8 +195,6 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
         // deadline, the loop forces the upload every frame — robust regardless
         // of how long the decode takes. Re-armed after every texture swap.
         let forceFrameUntil = performance.now() + 2000;
-        // Throttles the "decode a first frame" nudge for a freshly added clip.
-        let lastDecodeNudge = 0;
         // How far the slaved video may drift from the master before we snap it
         // back (buffering stalls, clip-boundary entry). Generous, so normal
         // playback — where both advance at real-time — never triggers a seek.
@@ -304,17 +302,14 @@ export function PreviewCanvas({ projectPath, sourceWidth, sourceHeight }: Previe
                   scene.forceVideoFrame();
                 }
                 // A clip added WHILE the editor is open (imported video, GIF→MP4)
-                // starts from an element that has metadata but NO decoded frame:
-                // the texture swap only waits for `loadedmetadata`, and with ~zero
-                // drift nothing above seeks, so the canvas stayed black until the
-                // scene was rebuilt (leaving and reopening the project). Nudge the
-                // decoder and keep the warm-up alive until a frame really exists.
+                // has metadata but no decoded frame yet, and the texture swap only
+                // waits for `loadedmetadata` — so the canvas stayed black until the
+                // scene was rebuilt (leaving and reopening the project). Just keep
+                // the warm-up window alive until a frame exists; `preload='auto'`
+                // decodes it on its own. We deliberately do NOT poke currentTime
+                // here: extra seeks in the preview show up as input lag.
                 if (activeVideo.readyState < 2 /* HAVE_CURRENT_DATA */) {
-                  if (now - lastDecodeNudge > 150) {
-                    lastDecodeNudge = now;
-                    try { activeVideo.currentTime = expectedSec + 0.001; } catch { /* ignore */ }
-                  }
-                  forceFrameUntil = Math.max(forceFrameUntil, now + 500);
+                  forceFrameUntil = Math.max(forceFrameUntil, now + 300);
                 }
               }
             } else if (now < forceFrameUntil) {

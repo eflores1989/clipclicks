@@ -36,21 +36,25 @@ const ENCODER_AVAILABLE = typeof (globalThis as { VideoEncoder?: unknown }).Vide
  *  source frame: a seek is a full decoder+IO round trip (the dominant cost of
  *  this export), and re-seeking within one frame decodes the very same picture.
  *  Pass half a source-frame duration. */
-function seekExact(v: HTMLVideoElement, t: number, toleranceSec = 0.0005): Promise<void> {
+function seekExact(v: HTMLVideoElement, t: number, toleranceSec = 0.0005): Promise<{ timedOut: boolean }> {
   return new Promise((resolve) => {
-    if (Math.abs(v.currentTime - t) <= toleranceSec) { resolve(); return; }
+    if (Math.abs(v.currentTime - t) <= toleranceSec) { resolve({ timedOut: false }); return; }
     let done = false;
     let timer = 0;
-    const finish = (): void => {
+    const finish = (timedOut: boolean): void => {
       if (done) return;
       done = true;
       window.clearTimeout(timer);
-      v.removeEventListener('seeked', finish);
-      resolve();
+      v.removeEventListener('seeked', onSeeked);
+      resolve({ timedOut });
     };
-    v.addEventListener('seeked', finish, { once: true });
-    try { v.currentTime = t; } catch { finish(); }
-    timer = window.setTimeout(finish, 1000);
+    const onSeeked = (): void => finish(false);
+    v.addEventListener('seeked', onSeeked, { once: true });
+    try { v.currentTime = t; } catch { finish(false); }
+    // Giving up here means we encode whatever frame is currently decoded — i.e. a
+    // STALE picture. Callers count these: a nonzero number means the exported
+    // video can be missing what actually happened at those moments.
+    timer = window.setTimeout(() => finish(true), 2000);
   });
 }
 
@@ -154,7 +158,7 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
     let sceneClipId: string | null = null;
     // Per-phase timing so a slow export can be diagnosed instead of guessed at.
     // (Logged every 25% + a final summary. Zero effect on output quality.)
-    const prof = { seek: 0, compose: 0, render: 0, encode: 0, wait: 0, seeks: 0 };
+    const prof = { seek: 0, compose: 0, render: 0, encode: 0, wait: 0, seeks: 0, staleFrames: 0 };
     let nextProfLog = 0.25;
 
     for (let i = 0; i < totalFrames; i++) {
@@ -175,18 +179,18 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
         if (!isImage) {
           const v = videoEls.get(clip.id);
           if (v) {
-            // Tolerance = half a SOURCE frame: if the output fps is higher than
-            // the source's (or the clip is slowed down), consecutive output
-            // frames map to the same source picture — seeking again would cost a
-            // full decode round trip for an identical frame.
-            const halfSrcFrame = 1 / (2 * Math.max(1, clip.fps || 30));
+            // ALWAYS seek to the exact time. A tolerance here (skipping the seek
+            // when the target is "close enough") makes consecutive output frames
+            // reuse the previously decoded picture — that silently freezes short
+            // lived things (a dropdown opening) out of the exported video, so it
+            // is not worth the saved decode round trips.
             const target = located.localMs / 1000; // localMs already accounts for clip speed
-            const needed = Math.abs(v.currentTime - target) > halfSrcFrame;
             const t0 = performance.now();
-            await seekExact(v, target, halfSrcFrame);
+            const res = await seekExact(v, target);
             seekMs = performance.now() - t0;
             prof.seek += seekMs;
-            if (needed) prof.seeks++;
+            prof.seeks++;
+            if (res.timedOut) prof.staleFrames++;
           }
         }
         const b = clip.displayBounds;
@@ -225,12 +229,10 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
       prof.encode += performance.now() - tRender;
 
       // Backpressure: wait while the encoder queue is deep; bail on error/cancel,
-      // and fail (rather than hang) if a frame stalls > 15s. A DEEP queue matters:
-      // it lets the encoder chew on already-composed frames while we seek/render
-      // the next one, instead of the loop stalling on every single frame.
+      // and fail (rather than hang) if a frame stalls > 15s.
       const tWait0 = performance.now();
       let waited = 0;
-      while (encoder.encodeQueueSize > 24) {
+      while (encoder.encodeQueueSize > 8) {
         if (encodeError) throw encodeError;
         if (shouldCancel()) throw new Error('CANCELLED');
         await new Promise((r) => setTimeout(r, 2));
@@ -242,11 +244,14 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
       if (done >= nextProfLog) {
         nextProfLog += 0.25;
         const n = i + 1;
-        console.log(`[export] ${Math.round(done * 100)}% — per frame avg (ms): seek=${(prof.seek / n).toFixed(1)} compose=${(prof.compose / n).toFixed(1)} render=${(prof.render / n).toFixed(1)} encode=${(prof.encode / n).toFixed(1)} queueWait=${(prof.wait / n).toFixed(1)} | real seeks ${prof.seeks}/${n}`);
+        console.log(`[export] ${Math.round(done * 100)}% — per frame avg (ms): seek=${(prof.seek / n).toFixed(1)} compose=${(prof.compose / n).toFixed(1)} render=${(prof.render / n).toFixed(1)} encode=${(prof.encode / n).toFixed(1)} queueWait=${(prof.wait / n).toFixed(1)} | real seeks ${prof.seeks}/${n}${prof.staleFrames ? ` | ⚠ STALE FRAMES ${prof.staleFrames}` : ''}`);
       }
       onProgress((done) * 100);
     }
     console.log(`[export] done. ${totalFrames} frames; totals (s): seek=${(prof.seek / 1000).toFixed(1)} compose=${(prof.compose / 1000).toFixed(1)} render=${(prof.render / 1000).toFixed(1)} encode=${(prof.encode / 1000).toFixed(1)} queueWait=${(prof.wait / 1000).toFixed(1)}`);
+    if (prof.staleFrames > 0) {
+      console.warn(`[export] ⚠ ${prof.staleFrames}/${totalFrames} frames encoded a STALE picture (the source seek never completed in time) — those moments may not show what happened on screen.`);
+    }
 
     if (encodeError) throw encodeError;
     await encoder.flush();
