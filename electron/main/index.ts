@@ -196,6 +196,10 @@ const MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
 };
 
+/** Project assets never change once written (unique per-asset filenames), so they
+ *  can be cached aggressively — see the note in the range handler below. */
+const CACHE_IMMUTABLE = 'public, max-age=31536000, immutable';
+
 function nodeStreamToWeb(stream: NodeJS.ReadableStream): ReadableStream<Uint8Array> {
   return Readable.toWeb(stream as Readable) as unknown as ReadableStream<Uint8Array>;
 }
@@ -253,7 +257,13 @@ function registerVzAssetProtocol(): void {
           'Content-Length': String(end - start + 1),
           'Content-Range': `bytes ${start}-${end}/${total}`,
           'Accept-Ranges': 'bytes',
-          'Cache-Control': 'no-cache',
+          // Assets are IMMUTABLE (each clip/audio/image gets a unique filename, and a
+          // project's recording.mp4 is written once), so let Chromium cache the
+          // ranges. This matters a lot for the frame-by-frame export: it seeks
+          // once per output frame over an all-keyframes file (~15 Mbps, hundreds
+          // of MB), and with `no-cache` every one of those seeks round-tripped
+          // back into this handler to re-read from disk.
+          'Cache-Control': CACHE_IMMUTABLE,
         },
       });
     }
@@ -265,7 +275,7 @@ function registerVzAssetProtocol(): void {
         'Content-Type': contentType,
         'Content-Length': String(total),
         'Accept-Ranges': 'bytes',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': CACHE_IMMUTABLE,
       },
     });
   });

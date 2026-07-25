@@ -580,13 +580,16 @@ function ImagePoolView() {
     try {
       const media = await window.videoZoom.project.importImage(projectPath);
       if (media) {
-        // Fill in real dimensions by loading the copied asset.
-        try {
-          const abs = `${projectPath}/${media.filePath}`.replace(/\\/g, '/');
-          const url = await window.videoZoom.project.assetUrl(abs);
-          const { w, h } = await loadImageDims(url);
-          media.width = w; media.height = h;
-        } catch { /* leave 0 → clip falls back to 1920×1080 */ }
+        // Fill in real dimensions by loading the copied asset. Animated (GIF→MP4)
+        // entries already carry probed dims and aren't loadable as an <img>.
+        if (!media.animated) {
+          try {
+            const abs = `${projectPath}/${media.filePath}`.replace(/\\/g, '/');
+            const url = await window.videoZoom.project.assetUrl(abs);
+            const { w, h } = await loadImageDims(url);
+            media.width = w; media.height = h;
+          } catch { /* leave 0 → clip falls back to 1920×1080 */ }
+        }
         update((d) => { d.imagePool.push(media); }, { label: 'Import image' });
       }
     } catch (err) {
@@ -674,11 +677,17 @@ function ImagePoolView() {
           {imagePool.map((m: ImageMedia) => (
             <li key={m.id} className="media-pool__card" style={{ cursor: 'default' }}>
               <div className="media-pool__card-icon media-pool__card-thumb">
-                {thumbs[m.id] ? <img src={thumbs[m.id]} alt="" /> : <ImageIcon size={18} />}
+                {!thumbs[m.id] ? <ImageIcon size={18} />
+                  : m.animated
+                    ? <video src={thumbs[m.id]} muted loop autoPlay playsInline />
+                    : <img src={thumbs[m.id]} alt="" />}
               </div>
               <div className="media-pool__card-body">
                 <span className="media-pool__card-title">{m.name}</span>
-                <span className="media-pool__card-meta">{m.width || '?'}×{m.height || '?'}</span>
+                <span className="media-pool__card-meta">
+                  {m.width || '?'}×{m.height || '?'}
+                  {m.animated && <> <span className="media-pool__card-sep">·</span> GIF {((m.durationMs ?? 0) / 1000).toFixed(1)}s</>}
+                </span>
               </div>
               <div className="media-pool__card-actions">
                 <button className="icon-btn" onClick={() => addToTimeline(m.id)} title="Add to video track" aria-label="Add image to timeline">

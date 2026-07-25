@@ -1,6 +1,6 @@
 # Clipclicks Studio — Funcionalidades
 
-Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.1** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, fix de barra de grabación y de aspect ratio de verticales). Sirve de checklist para verificar cada feature.
+Manual completo de lo que la app puede hacer hoy. Actualizado a **v0.2.2** (import de video, cronómetro, seguimiento/paneo cinematográfico con keyframes, GIFs animados, sombra nítida en el render, tiempo estimado de export). Sirve de checklist para verificar cada feature.
 
 > Convenciones: **negrita** = botón / atajo / nombre de UI. `código` = ruta, archivo o valor literal. Las secciones marcadas **🚧 pendiente** son features ya planificadas pero todavía no implementadas; vienen en sub-fases siguientes.
 
@@ -300,6 +300,8 @@ Los archivos se copian a `%APPDATA%/VideoZoom/backgrounds/` y un índice JSON lo
 
 Todos los sliders se **coalescen en una sola entry de historia** por drag (Ctrl+Z revierte el drag completo de un golpe).
 
+**Nitidez en el render (✅ v0.2.2)**: en el editor la sombra se ve en "capas de tono" a propósito (2 pasadas de blur = barato, el preview corre a 30fps). Al **exportar** se renderiza con 6 pasadas → degradado suave. Además el blur y el offset ahora **escalan con el alto de la escena** (base 720px): antes estaban en píxeles fijos, así que a 1080p/4K la sombra salía proporcionalmente más chica y dura que en el preview. Ahora preview y export coinciden.
+
 ### Renderizado interno
 
 El background se **dibuja una sola vez en un Canvas 2D** offline (gradients, dots, etc.) y se sube como textura PixiJS. Se repinta solo cuando cambiás el preset. Cambios de padding/radius/sombra son **transformaciones cheap del sprite**.
@@ -438,6 +440,7 @@ El reloj master reconcilia clip activo + textura cada frame desde `locateGlobal(
 
 ### Pestaña "Imágenes" (Media)
 - **Importar**: file dialog (png/jpg/webp/gif/bmp), copia a `assets/image-{id}.ext`; las dimensiones reales las resuelve el renderer cargando el asset.
+- **GIFs animados (✅ v0.2.2)**: un `.gif` se **transcodifica a MP4** al importarlo (`assets/image-{id}.mp4`, all-keyframes, 25fps CFR, dimensiones forzadas a par) y al soltarlo en el timeline crea un clip `kind:'video'` con su duración real. Por eso **anima en el canvas y en los dos métodos de export**. Antes quedaba fijo en el primer frame: un `<img>` sube su textura WebGL una sola vez, y su animación DOM corre en wall-clock (lo que además haría no-determinista el export cuadro por cuadro). La card del pool muestra el GIF con un `<video>` en loop y la etiqueta `GIF <duración>`. Si la conversión falla, cae al comportamiento anterior (imagen fija).
 - **Sólido**: color picker + "Agregar sólido" → pinta un PNG del tamaño del proyecto (Canvas 2D → `saveImageAsset`).
 - **Degradados**: 6 presets (Sunset/Ocean/Purple/Mint/Charcoal/Night) que generan un PNG con `linear-gradient`.
 - Cada item es una card con thumbnail; **+** lo agrega al final del canal de video (clip de 3s); 🗑 lo borra del pool (el archivo solo se borra si ningún clip lo usa).
@@ -542,8 +545,23 @@ El render reproduce el timeline completo en tiempo real (tarda ≈ el largo del 
 
 ### Progreso + final
 - Dos etapas con barra: "Componiendo el timeline…" (captura realtime) y "Codificando MP4…" (ffmpeg, % por `time=`).
+- **Tiempo estimado (✅ v0.2.2)**: al lado del % se muestra `~Xm YYs restantes`. Se calcula con la velocidad de avance real observada (suavizada con EMA) y descuenta cada segundo; la referencia se reinicia en cada etapa porque corren a ritmos distintos. Aparece a los ~1.5s (antes no hay muestra confiable). Funciona en los dos métodos.
 - **Cancelar** en cualquier etapa (corta el loop o mata el ffmpeg).
 - Al terminar (estilo Screen Studio): **Abrir carpeta** (`showItemInFolder`), **Reproducir** (`shell.openPath`) y "Exportar otro".
+
+### Qué se exporta (overlays)
+Todo lo que ves en el preview sale en el MP4, en **los dos métodos**: zooms (incluido el **paneo/seguimiento** por keyframes), cursor, fondos, crop, transiciones, **texto** y **cronómetro**.
+
+> Bug corregido en v0.2.2: el **cronómetro no aparecía** en el export cuadro por cuadro. El loop determinista llamaba `updateTexts` pero no `updateTimers` (sí estaba en el path realtime), así que los nodos del timer nunca se actualizaban por frame. Ahora ambos paths llaman a los dos.
+
+### Velocidad del export cuadro por cuadro
+Es **inherentemente más lento que realtime** porque por cada frame de salida hace: seek exacto del video fuente → render de la escena → `VideoFrame` → encode. El costo dominante medido es el **seek**: los assets del proyecto son *all-keyframes* (`-g 1`, ideal para scrubbing) y por eso pesados (~15 Mbps, 539 MB para 4:46), así que cada seek re-lee del disco.
+
+Mejoras aplicadas en v0.2.2 (**ninguna toca la calidad de salida**):
+- Los rangos de `vzasset://` ahora se sirven **cacheables** (`immutable`): los assets nunca cambian (nombres únicos por asset), y antes iban con `no-cache`, así que cada uno de los miles de seeks volvía a pegarle al handler y al disco.
+- **Se saltea el seek** cuando el frame de salida cae dentro del *mismo frame fuente* (tolerancia = medio frame): re-seekear ahí decodifica la misma imagen. Ayuda cuando el fps de salida es mayor al de la fuente o el clip está ralentizado.
+- **Cola del encoder más profunda** (8 → 24): el encoder trabaja sobre frames ya compuestos mientras el loop hace el seek/render del siguiente, en vez de frenar en cada frame.
+- **Perfilado por fase** en la consola (cada 25% + resumen final): `seek / compose / render / encode / queueWait` en ms por frame. Sirve para ver dónde se va el tiempo en un caso real.
 
 ### Calidad y límites
 - **Sin upscaling**: las resoluciones mayores a la fuente se **deshabilitan** (un 1080p exportado a 4K no agrega detalle y, peor, el encode VP9 en vivo a esa resolución produce un webm vacío → error). `targetDims` también clampea al alto de la fuente por las dudas. Si grabás un monitor 4K, la fuente es 4K y las opciones altas se habilitan.

@@ -199,6 +199,47 @@ export function probeVideoMeta(input: string): Promise<ProbedVideoMeta> {
 }
 
 /**
+ * Convert an animated GIF to an all-keyframes MP4 so it can live on the timeline
+ * as a normal video clip. A GIF in an `<img>` only ever uploads its FIRST frame
+ * to a WebGL texture (and its DOM animation runs on wall-clock, which would make
+ * a frame-by-frame export non-deterministic) — turning it into a video makes it
+ * animate in the preview AND both export paths with exact timing.
+ *
+ * `-r 25` normalizes the GIF's variable frame delays to CFR (predictable seeks),
+ * the scale filter forces even dimensions (yuv420p requires them; GIFs are often
+ * odd-sized) and `-g 1` keeps every frame a keyframe for exact scrubbing.
+ */
+export function convertGifToMp4(input: string, output: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!existsSync(FFMPEG_PATH)) { reject(new Error(`ffmpeg binary missing at ${FFMPEG_PATH}`)); return; }
+    if (!existsSync(input)) { reject(new Error(`gif missing at ${input}`)); return; }
+    const args = [
+      '-y',
+      '-i', input,
+      '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos',
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '20',
+      '-g', '1',
+      '-r', '25',
+      '-pix_fmt', 'yuv420p',
+      '-an',
+      '-movflags', '+faststart',
+      '-f', 'mp4',
+      output,
+    ];
+    const proc = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    let tail = '';
+    proc.stderr.on('data', (c: Buffer) => { tail = (tail + c.toString('utf8')).slice(-2000); });
+    proc.on('error', (err) => reject(new Error(`gif convert spawn failed: ${err.message}`)));
+    proc.on('close', (code) => {
+      if (code === 0 && existsSync(output)) resolve();
+      else reject(new Error(`gif convert exited ${code}\n${tail.split('\n').slice(-6).join('\n')}`));
+    });
+  });
+}
+
+/**
  * Mux an audio file into a video file (copying the video stream, encoding the
  * audio to AAC) and write the result to `output`. Used by the native (gdigrab)
  * recording path, whose MP4 is video-only — the audio was captured in parallel

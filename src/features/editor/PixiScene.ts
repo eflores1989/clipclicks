@@ -92,6 +92,8 @@ export class PixiScene {
    * overlay can align its handles to the whole source. */
   private cropEditMode = false;
   private trackEditMode = false;
+  /** True for export scenes: spend more GPU on filter quality (smooth shadow). */
+  private highQuality = false;
   // Cursor rendering: a halo + dot follow the smoothed mouse position, and a
   // pulse Graphics is redrawn every frame with all click highlights whose
   // animation window contains currentMs (stateless — survives scrubbing).
@@ -142,7 +144,7 @@ export class PixiScene {
   static async create(
     target: HTMLElement,
     sourceSize: SceneSize,
-    opts: { maxWidth?: number; maxFps?: number; preserveDrawingBuffer?: boolean } = {},
+    opts: { maxWidth?: number; maxFps?: number; preserveDrawingBuffer?: boolean; highQuality?: boolean } = {},
   ): Promise<PixiScene> {
     // Scale down for preview if the source is larger than our budget. The
     // export path passes a large maxWidth so it renders at full target res.
@@ -180,7 +182,9 @@ export class PixiScene {
     canvas.style.height = '100%';
     canvas.style.display = 'block';
     target.appendChild(canvas);
-    return new PixiScene(app, size);
+    const scene = new PixiScene(app, size);
+    scene.highQuality = opts.highQuality ?? false;
+    return scene;
   }
 
   get canvas(): HTMLCanvasElement {
@@ -602,20 +606,32 @@ export class PixiScene {
     this.applyZoomToSprite(IDENTITY_ZOOM);
 
     // Drop shadow on the video CONTAINER so it follows the mask shape.
+    //
+    // blur/offset are authored in PREVIEW pixels, so they must be SCALED by the
+    // scene height (relative to the 720px authoring baseline). Without this the
+    // exported shadow is proportionally tighter/harder than the preview — at 4K
+    // it was ~1/3 the relative size. `quality` is the number of blur passes:
+    // low on the preview (cheap, shows the banding the user is fine with), high
+    // on export scenes so the gradient comes out smooth.
     if (bg.shadow.enabled) {
+      const s = Math.max(0.35, this.size.h / 720);
+      const blurPx = Math.max(0.1, (bg.shadow.blur / 8) * s);
+      const offsetY = bg.shadow.y * s;
       if (!this.dropShadow) {
         this.dropShadow = new DropShadowFilter({
-          offset: { x: 0, y: bg.shadow.y },
+          offset: { x: 0, y: offsetY },
           alpha: bg.shadow.opacity,
-          blur: Math.max(0.1, bg.shadow.blur / 8),
-          quality: 2,
+          blur: blurPx,
+          // Passes can't be changed after construction, and the flag is fixed
+          // per scene, so this is decided once here.
+          quality: this.highQuality ? 6 : 2,
           color: 0x000000,
         });
         this.videoContainer.filters = [this.dropShadow];
       } else {
-        this.dropShadow.offset = { x: 0, y: bg.shadow.y };
+        this.dropShadow.offset = { x: 0, y: offsetY };
         this.dropShadow.alpha = bg.shadow.opacity;
-        this.dropShadow.blur = Math.max(0.1, bg.shadow.blur / 8);
+        this.dropShadow.blur = blurPx;
       }
     } else {
       this.videoContainer.filters = [];

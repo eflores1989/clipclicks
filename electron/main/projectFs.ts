@@ -25,6 +25,7 @@ import type { MouseEventRaw, RecordingSource } from '../../src/shared/types/reco
 // MouseEventRaw and RecordingSource are still referenced by the IPC payload types
 // and migration logic — keep the import.
 import {
+  convertGifToMp4,
   extractAudioPeaks,
   extractAudioToFile,
   generateThumbnails,
@@ -967,8 +968,40 @@ export async function importImage(projectPath: string): Promise<ImageMedia | nul
   const src = res.filePaths[0];
   const id = randomUUID();
   const ext = (extname(src).replace('.', '').toLowerCase()) || 'png';
-  const fileName = `image-${id}.${ext}`;
   await mkdir(join(projectPath, 'assets'), { recursive: true });
+
+  // Animated GIF → transcode to MP4 and treat it as a video on the timeline, so
+  // it actually animates (an <img> only ever textures its first frame). Falls
+  // back to a plain still copy if the conversion fails (e.g. a static GIF).
+  if (ext === 'gif') {
+    const mp4Name = `image-${id}.mp4`;
+    const mp4Abs = join(projectPath, 'assets', mp4Name);
+    try {
+      await convertGifToMp4(src, mp4Abs);
+      const meta = await probeVideoMeta(mp4Abs);
+      if (meta.width > 0 && meta.height > 0 && meta.durationMs > 0) {
+        registerProjectRoot(projectPath);
+        return {
+          id,
+          filePath: `assets/${mp4Name}`,
+          name: basename(src),
+          width: meta.width,
+          height: meta.height,
+          kind: 'imported',
+          addedAt: Date.now(),
+          animated: true,
+          durationMs: meta.durationMs,
+          fps: meta.fps || 25,
+        };
+      }
+      await rm(mp4Abs, { force: true }).catch(() => {});
+    } catch (err) {
+      console.warn('[projectFs] GIF→MP4 conversion failed, importing as a still:', err);
+      await rm(mp4Abs, { force: true }).catch(() => {});
+    }
+  }
+
+  const fileName = `image-${id}.${ext}`;
   await copyFile(src, join(projectPath, 'assets', fileName));
   registerProjectRoot(projectPath);
   return { id, filePath: `assets/${fileName}`, name: basename(src), width: 0, height: 0, kind: 'imported', addedAt: Date.now() };

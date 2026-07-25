@@ -21,15 +21,27 @@ const ENCODER_AVAILABLE = typeof (globalThis as { VideoEncoder?: unknown }).Vide
 
 /** Seek a (non-playing) video to an exact time and wait for the frame. We wait
  *  ONLY on `seeked` — `requestVideoFrameCallback` is unreliable on a paused
- *  video and was the cause of the earlier export being pathologically slow. */
-function seekExact(v: HTMLVideoElement, t: number): Promise<void> {
+ *  video and was the cause of the earlier export being pathologically slow.
+ *
+ *  `toleranceSec` skips the seek entirely when we're already inside the SAME
+ *  source frame: a seek is a full decoder+IO round trip (the dominant cost of
+ *  this export), and re-seeking within one frame decodes the very same picture.
+ *  Pass half a source-frame duration. */
+function seekExact(v: HTMLVideoElement, t: number, toleranceSec = 0.0005): Promise<void> {
   return new Promise((resolve) => {
-    if (Math.abs(v.currentTime - t) < 0.0005) { resolve(); return; }
+    if (Math.abs(v.currentTime - t) <= toleranceSec) { resolve(); return; }
     let done = false;
-    const finish = (): void => { if (!done) { done = true; v.removeEventListener('seeked', finish); resolve(); } };
+    let timer = 0;
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      v.removeEventListener('seeked', finish);
+      resolve();
+    };
     v.addEventListener('seeked', finish, { once: true });
     try { v.currentTime = t; } catch { finish(); }
-    setTimeout(finish, 1000);
+    timer = window.setTimeout(finish, 1000);
   });
 }
 
@@ -121,6 +133,10 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
     const totalFrames = Math.max(1, Math.round((totalMs / 1000) * fps));
     const gop = Math.max(1, fps * 2);
     let sceneClipId: string | null = null;
+    // Per-phase timing so a slow export can be diagnosed instead of guessed at.
+    // (Logged every 25% + a final summary. Zero effect on output quality.)
+    const prof = { seek: 0, compose: 0, render: 0, encode: 0, wait: 0, seeks: 0 };
+    let nextProfLog = 0.25;
 
     for (let i = 0; i < totalFrames; i++) {
       if (shouldCancel()) throw new Error('CANCELLED');
@@ -128,6 +144,8 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
       const masterMs = (i / fps) * 1000;
       const located = masterMs <= videoEnd + 1 ? locateGlobal(project, masterMs) : null;
 
+      const tFrame0 = performance.now();
+      let seekMs = 0;
       if (located) {
         const clip = located.clip;
         const isImage = clip.kind === 'image';
@@ -137,7 +155,20 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
         scene.setCrop(clip.crop ?? null);
         if (!isImage) {
           const v = videoEls.get(clip.id);
-          if (v) await seekExact(v, located.localMs / 1000); // localMs already accounts for clip speed
+          if (v) {
+            // Tolerance = half a SOURCE frame: if the output fps is higher than
+            // the source's (or the clip is slowed down), consecutive output
+            // frames map to the same source picture — seeking again would cost a
+            // full decode round trip for an identical frame.
+            const halfSrcFrame = 1 / (2 * Math.max(1, clip.fps || 30));
+            const target = located.localMs / 1000; // localMs already accounts for clip speed
+            const needed = Math.abs(v.currentTime - target) > halfSrcFrame;
+            const t0 = performance.now();
+            await seekExact(v, target, halfSrcFrame);
+            seekMs = performance.now() - t0;
+            prof.seek += seekMs;
+            if (needed) prof.seeks++;
+          }
         }
         const b = clip.displayBounds;
         const coord = b ? { width: b.w, height: b.h } : { width: clip.sourceWidth, height: clip.sourceHeight };
@@ -162,24 +193,41 @@ export async function encodeTimelineToMp4(opts: DeterministicExportOptions): Pro
       }
 
       scene.updateTexts(Math.round(masterMs), project.timeline.textEvents ?? [], null);
+      scene.updateTimers(Math.round(masterMs), project.timeline.timerEvents ?? [], null);
+      const tCompose = performance.now();
+      prof.compose += tCompose - tFrame0 - seekMs;
       scene.forceVideoFrame();
+      const tRender = performance.now();
+      prof.render += tRender - tCompose;
 
       const frame = new VideoFrame(scene.canvas, { timestamp: Math.round(i * frameDurUs), duration: Math.round(frameDurUs) });
       encoder.encode(frame, { keyFrame: i % gop === 0 });
       frame.close();
+      prof.encode += performance.now() - tRender;
 
       // Backpressure: wait while the encoder queue is deep; bail on error/cancel,
-      // and fail (rather than hang) if a frame stalls > 15s.
+      // and fail (rather than hang) if a frame stalls > 15s. A DEEP queue matters:
+      // it lets the encoder chew on already-composed frames while we seek/render
+      // the next one, instead of the loop stalling on every single frame.
+      const tWait0 = performance.now();
       let waited = 0;
-      while (encoder.encodeQueueSize > 8) {
+      while (encoder.encodeQueueSize > 24) {
         if (encodeError) throw encodeError;
         if (shouldCancel()) throw new Error('CANCELLED');
         await new Promise((r) => setTimeout(r, 2));
         waited += 2;
         if (waited > 15000) throw new Error('The encoder stalled (frame ' + i + ').');
       }
-      onProgress(((i + 1) / totalFrames) * 100);
+      prof.wait += performance.now() - tWait0;
+      const done = (i + 1) / totalFrames;
+      if (done >= nextProfLog) {
+        nextProfLog += 0.25;
+        const n = i + 1;
+        console.log(`[export] ${Math.round(done * 100)}% — per frame avg (ms): seek=${(prof.seek / n).toFixed(1)} compose=${(prof.compose / n).toFixed(1)} render=${(prof.render / n).toFixed(1)} encode=${(prof.encode / n).toFixed(1)} queueWait=${(prof.wait / n).toFixed(1)} | real seeks ${prof.seeks}/${n}`);
+      }
+      onProgress((done) * 100);
     }
+    console.log(`[export] done. ${totalFrames} frames; totals (s): seek=${(prof.seek / 1000).toFixed(1)} compose=${(prof.compose / 1000).toFixed(1)} render=${(prof.render / 1000).toFixed(1)} encode=${(prof.encode / 1000).toFixed(1)} queueWait=${(prof.wait / 1000).toFixed(1)}`);
 
     if (encodeError) throw encodeError;
     await encoder.flush();

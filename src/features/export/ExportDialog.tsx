@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Download, FolderOpen, Play, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { useExportStore } from '@/stores/export';
@@ -33,6 +33,57 @@ const AQUALITY: { value: string; label: string; kbps: number }[] = [
 ];
 
 const even = (n: number): number => Math.max(2, Math.round(n / 2) * 2);
+
+function formatEta(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  if (s < 60) return `~${s}s restantes`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `~${m}m ${String(r).padStart(2, '0')}s restantes`;
+}
+
+/**
+ * Estimated time remaining for the current export stage. Measures the observed
+ * progress rate (percent per ms) since the stage started and extrapolates to
+ * 100%, smoothed with an EMA so it doesn't jitter, and ticked down every second
+ * so it keeps moving between progress events. The baseline resets on every stage
+ * change (rendering → transcoding), since those stages run at different rates.
+ */
+function useEtaSeconds(active: boolean, stageKey: string, percent: number): number | null {
+  const baseRef = useRef<{ t: number; p: number } | null>(null);
+  const [eta, setEta] = useState<number | null>(null);
+
+  // New stage (or finished) → forget the previous rate.
+  useEffect(() => {
+    baseRef.current = null;
+    setEta(null);
+  }, [stageKey, active]);
+
+  useEffect(() => {
+    if (!active) return;
+    const now = Date.now();
+    if (percent <= 0) return;
+    if (!baseRef.current) { baseRef.current = { t: now, p: percent }; return; }
+    const dp = percent - baseRef.current.p;
+    const dt = now - baseRef.current.t;
+    // Need a meaningful sample before showing a number (avoids a wild first guess).
+    if (dp <= 0.3 || dt < 1500) return;
+    const remainingSec = ((100 - percent) / (dp / dt)) / 1000;
+    if (!Number.isFinite(remainingSec) || remainingSec < 0) return;
+    setEta((prev) => (prev === null ? remainingSec : prev * 0.7 + remainingSec * 0.3));
+  }, [percent, active, stageKey]);
+
+  // Count down between progress events; the next event corrects the value.
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => {
+      setEta((prev) => (prev === null ? prev : Math.max(0, prev - 1)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [active]);
+
+  return eta;
+}
 
 function targetDims(resolution: ExportResolution, sw: number, sh: number, allowUpscale: boolean): { w: number; h: number } {
   const aspect = sw / sh;
@@ -70,6 +121,7 @@ export function ExportDialog() {
   const cancelRef = useRef(false);
 
   const busy = status === 'rendering' || status === 'transcoding';
+  const etaSec = useEtaSeconds(busy, status, percent);
 
   const close = useCallback(() => {
     if (busy) return; // can't close mid-export; use Cancel
@@ -225,7 +277,10 @@ export function ExportDialog() {
                 : 'Finishing MP4…'}
             </p>
             <div className="export-bar"><div className="export-bar__fill" style={{ width: `${Math.round(percent)}%` }} /></div>
-            <span className="export-dialog__pct">{Math.round(percent)}%</span>
+            <span className="export-dialog__pct">
+              {Math.round(percent)}%
+              {etaSec !== null && <span className="export-dialog__eta">{formatEta(etaSec)}</span>}
+            </span>
             <button className="btn btn--small" onClick={cancel}>Cancel</button>
           </div>
         )}

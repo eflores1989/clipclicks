@@ -31,7 +31,7 @@ export async function getExportScene(w: number, h: number): Promise<PixiScene> {
     exportHost = document.createElement('div');
     exportHost.style.cssText = 'position:fixed;left:-99999px;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none;';
     document.body.appendChild(exportHost);
-    exportScene = await PixiScene.create(exportHost, { w, h }, { maxWidth: Infinity, preserveDrawingBuffer: true });
+    exportScene = await PixiScene.create(exportHost, { w, h }, { maxWidth: Infinity, preserveDrawingBuffer: true, highQuality: true });
   } else {
     await exportScene.resize(w, h);
   }

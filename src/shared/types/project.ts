@@ -133,13 +133,24 @@ export interface AudioMedia {
  */
 export interface ImageMedia {
   id: UUID;
-  /** Relative path within the .vzproj, e.g. "assets/image-{id}.png". */
+  /** Relative path within the .vzproj, e.g. "assets/image-{id}.png". For an
+   *  ANIMATED entry (see `animated`) this points at the converted `.mp4`. */
   filePath: string;
   name: string;
   width: number;
   height: number;
   kind: 'imported' | 'solid' | 'gradient';
   addedAt: number;
+  /**
+   * True for an imported animated GIF: it was transcoded to an MP4 on import, so
+   * `filePath` is a video and placing it on the timeline creates a `kind:'video'`
+   * clip (that's what makes it actually animate in the canvas + exports).
+   */
+  animated?: boolean;
+  /** Animated entries only: the clip's real duration, from the converted MP4. */
+  durationMs?: Ms;
+  /** Animated entries only: fps of the converted MP4. */
+  fps?: number;
 }
 
 /**

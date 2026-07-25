@@ -51,8 +51,35 @@ export async function paintGradientPng(from: string, to: string, angleDeg: numbe
 }
 
 /** Build an image Clip from a pool entry, placed nowhere yet (timelineStartMs
- *  recomputed by recomputeTimeline). Behaves like a clip: trim/reorder/split. */
+ *  recomputed by recomputeTimeline). Behaves like a clip: trim/reorder/split.
+ *
+ *  An ANIMATED entry (a GIF, transcoded to MP4 on import) becomes a `kind:'video'`
+ *  clip instead: that routes it through the normal video path, so it animates in
+ *  the preview and in both export paths, with its real duration. */
 export function makeImageClip(media: ImageMedia): Clip {
+  if (media.animated && media.durationMs && media.durationMs > 0) {
+    return {
+      id: crypto.randomUUID(),
+      kind: 'video',
+      filePath: media.filePath,
+      sourceWidth: media.width || 1920,
+      sourceHeight: media.height || 1080,
+      fps: media.fps || 25,
+      durationMs: media.durationMs,
+      recordedAt: media.addedAt,
+      mouseEvents: [],
+      zoomEvents: [],
+      speedSegments: [],
+      inMs: 0,
+      outMs: media.durationMs,
+      timelineStartMs: 0,
+      // The converted MP4 is video-only; keep the enhanced cursor layer off.
+      systemCursorCaptured: true,
+      hasAudio: false,
+      audioVolume: 1,
+      audioMuted: true,
+    };
+  }
   return {
     id: crypto.randomUUID(),
     kind: 'image',
